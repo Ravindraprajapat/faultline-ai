@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
 import { MapPin, ChevronDown, ChevronUp, X, User, RefreshCw } from 'lucide-react'
+import { fetchWardPolygon } from '../utils/wardPolygon'
 import 'leaflet/dist/leaflet.css'
 
 /* ── Fix default icon path (prevents broken img) ── */
@@ -42,6 +43,16 @@ function ResizeMap() {
   return null
 }
 
+function FitBounds({ polygon }) {
+  const map = useMap()
+  useEffect(() => {
+    if (polygon && polygon.length > 0) {
+      map.fitBounds(L.latLngBounds(polygon), { padding: [30, 30] })
+    }
+  }, [polygon, map])
+  return null
+}
+
 function getWardCentroid(reports) {
   const valid = reports.filter(r => r.location?.latitude && r.location?.longitude)
   if (!valid.length) return [22.3072, 73.1812]
@@ -63,6 +74,8 @@ const AdminMap = () => {
   const [selectedWard, setSelectedWard] = useState(null)
   const [wardFilter, setWardFilter] = useState('ALL')
   const [expandedWard, setExpandedWard] = useState(null)
+  const [activeWard, setActiveWard] = useState(null)       // ward whose polygon is drawn
+  const [activeWardPolygon, setActiveWardPolygon] = useState(null)
 
   const fetchReports = async () => {
     setLoading(true)
@@ -102,6 +115,14 @@ const AdminMap = () => {
   }, [wardGroups])
 
   const maxPendingWard = sortedWards[0]?.ward
+
+  const loadWardPolygon = async (wardName) => {
+    if (activeWard === wardName) return   // already loaded
+    setActiveWard(wardName)
+    setActiveWardPolygon(null)
+    const poly = await fetchWardPolygon(wardName)
+    setActiveWardPolygon(poly)
+  }
 
   const wardDetailReports = useMemo(() => {
     if (!selectedWard) return []
@@ -186,7 +207,12 @@ const AdminMap = () => {
                     {/* View Details button */}
                     <div className="px-3 pb-3">
                       <button
-                        onClick={e => { e.stopPropagation(); setSelectedWard(ward); setWardFilter('ALL') }}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setSelectedWard(ward)
+                          setWardFilter('ALL')
+                          loadWardPolygon(ward)
+                        }}
                         className="w-full text-xs bg-sky-500 hover:bg-sky-600 text-white py-1.5 rounded-lg font-medium transition cursor-pointer">
                         View Details
                       </button>
@@ -234,21 +260,42 @@ const AdminMap = () => {
                 scrollWheelZoom
                 className="h-full w-full">
                 <ResizeMap />
+                <FitBounds polygon={activeWardPolygon} />
                 <TileLayer
                   attribution="&copy; OpenStreetMap contributors"
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
+                {/* Active ward boundary polygon */}
+                {activeWardPolygon && (
+                  <Polygon
+                    positions={activeWardPolygon}
+                    pathOptions={{
+                      color: '#2563eb',
+                      fillColor: '#93c5fd',
+                      fillOpacity: 0.25,
+                      weight: 2.5,
+                      opacity: 0.8
+                    }}
+                  >
+                    <Popup>
+                      <div className="text-sm font-semibold text-slate-800">{activeWard}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">Selected ward boundary</div>
+                    </Popup>
+                  </Polygon>
+                )}
+
                 {sortedWards.map(({ ward, centroid, total, pending, inProgress, resolved }) => {
                   const isHotspot = ward === maxPendingWard
                   const pinColor = isHotspot ? '#ef4444' : '#0ea5e9'
-                  const activeCount = pending + inProgress
 
                   return (
                     <Marker
                       key={ward}
                       position={centroid}
-                      icon={makePinIcon(pinColor, total)}>
+                      icon={makePinIcon(pinColor, total)}
+                      eventHandlers={{ click: () => loadWardPolygon(ward) }}
+                    >
                       <Popup minWidth={200}>
                         <div className="py-1">
                           {/* Ward name */}
@@ -332,7 +379,10 @@ const AdminMap = () => {
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-sky-500 inline-block" /> Other wards
           </span>
-          <span className="text-slate-400">· Number on pin = total complaints in ward</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm border-2 border-blue-600 bg-blue-200 inline-block opacity-70" /> Ward boundary
+          </span>
+          <span className="text-slate-400">· Click a pin to highlight ward boundary</span>
         </div>
 
         {/* ── WARD DETAIL MODAL ── */}

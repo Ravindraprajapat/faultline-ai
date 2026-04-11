@@ -27,5 +27,6 @@ adminRouter.delete('/reports/wardless', isAuth, isAdmin, deleteWardlessReports)
 
 // Officer only (ward-filtered)
 adminRouter.get('/officer/reports', isAuth, isAdminOrOfficer, getOfficerReports)
+adminRouter.patch('/officer/reports/:id/status', isAuth, isAdminOrOfficer, updateReportStatus)
 
 export default adminRouter

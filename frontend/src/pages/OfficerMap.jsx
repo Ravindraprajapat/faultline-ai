@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { motion } from 'framer-motion'
 import axios from 'axios'
@@ -7,6 +7,7 @@ import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
 import { Filter, MapPin, RefreshCw } from 'lucide-react'
 import { useSelector } from 'react-redux'
+import { fetchWardPolygon } from '../utils/wardPolygon'
 import 'leaflet/dist/leaflet.css'
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -44,6 +45,18 @@ function ResizeMap() {
   return null
 }
 
+// Zooms map to fit the polygon bounds
+function FitBounds({ polygon }) {
+  const map = useMap()
+  useEffect(() => {
+    if (polygon && polygon.length > 0) {
+      const bounds = L.latLngBounds(polygon)
+      map.fitBounds(bounds, { padding: [30, 30] })
+    }
+  }, [polygon, map])
+  return null
+}
+
 const STATUS_COLORS = {
   PENDING: 'text-yellow-600 bg-yellow-50 border-yellow-200',
   IN_PROGRESS: 'text-blue-600 bg-blue-50 border-blue-200',
@@ -58,6 +71,7 @@ const OfficerMap = () => {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [ward, setWard] = useState('')
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [wardPolygon, setWardPolygon] = useState(null)
 
   const fetchReports = async () => {
     setLoading(true)
@@ -67,8 +81,13 @@ const OfficerMap = () => {
         withCredentials: true
       })
       setReports(data.reports)
-      setWard(data.ward || userData?.assignedWard || '')
+      const wardName = data.ward || userData?.assignedWard || ''
+      setWard(wardName)
       setLastUpdated(new Date())
+      // Fetch ward boundary polygon
+      if (wardName) {
+        fetchWardPolygon(wardName).then(poly => setWardPolygon(poly))
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -261,10 +280,30 @@ const OfficerMap = () => {
               className="h-full w-full"
             >
               <ResizeMap />
+              <FitBounds polygon={wardPolygon} />
               <TileLayer
                 attribution="&copy; OpenStreetMap contributors"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+
+              {/* Ward boundary polygon */}
+              {wardPolygon && (
+                <Polygon
+                  positions={wardPolygon}
+                  pathOptions={{
+                    color: '#2563eb',
+                    fillColor: '#93c5fd',
+                    fillOpacity: 0.25,
+                    weight: 2.5,
+                    opacity: 0.8
+                  }}
+                >
+                  <Popup>
+                    <div className="text-sm font-semibold text-slate-800">{ward}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">Your assigned ward</div>
+                  </Popup>
+                </Polygon>
+              )}
               {filtered
                 .filter(r => r.location?.latitude && r.location?.longitude)
                 .map(r => (

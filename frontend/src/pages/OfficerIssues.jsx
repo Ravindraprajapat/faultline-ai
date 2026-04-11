@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import axios from 'axios'
 import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
-import { Filter, RefreshCw, CheckCircle, Clock, AlertCircle, MapPin } from 'lucide-react'
+import { Filter, RefreshCw, CheckCircle, Clock, AlertCircle, MapPin, ChevronDown } from 'lucide-react'
 import { useSelector } from 'react-redux'
 
 const STATUS_COLORS = {
@@ -84,6 +84,7 @@ const OfficerIssues = () => {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [ward, setWard] = useState('')
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [updatingId, setUpdatingId] = useState(null)
 
   const fetchReports = async () => {
     setLoading(true)
@@ -104,6 +105,22 @@ const OfficerIssues = () => {
   }
 
   useEffect(() => { fetchReports() }, [])
+
+  const handleStatusChange = async (id, newStatus) => {
+    setUpdatingId(id)
+    try {
+      const { data } = await axios.patch(
+        `${serverUrl}/api/admin/officer/reports/${id}/status`,
+        { status: newStatus },
+        { withCredentials: true }
+      )
+      setReports(prev => prev.map(r => r._id === id ? data.report : r))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     if (statusFilter === 'ALL') return reports
@@ -247,6 +264,7 @@ const OfficerIssues = () => {
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Address</th>
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Priority</th>
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Update Status</th>
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Assigned Officer</th>
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Date</th>
                     <th className="text-left px-4 py-3 font-semibold text-slate-600">Image</th>
@@ -284,6 +302,22 @@ const OfficerIssues = () => {
                           {STATUS_ICONS[r.status]}
                           {r.status?.replace('_', ' ')}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="relative">
+                          <select
+                            value={r.status}
+                            disabled={updatingId === r._id}
+                            onChange={e => handleStatusChange(r._id, e.target.value)}
+                            className={`appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-400 transition disabled:opacity-50 ${STATUS_COLORS[r.status]}`}
+                          >
+                            <option value="PENDING">Pending</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="RESOLVED">Resolved</option>
+                          </select>
+                          <ChevronDown size={12} className="absolute right-2 top-2.5 pointer-events-none opacity-60" />
+                        </div>
                       </td>
 
                       <td className="px-4 py-4 text-xs text-slate-600">
