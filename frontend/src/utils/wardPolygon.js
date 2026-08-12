@@ -1,6 +1,3 @@
-// Fetches boundary polygon for a place name using Nominatim
-// Returns array of [lat, lng] pairs or null if not found
-
 export async function fetchWardPolygon(wardName) {
   try {
     const searchName = wardName.includes(' - ')
