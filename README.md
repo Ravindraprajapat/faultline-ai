@@ -10,137 +10,177 @@
 - [Technology Stack](#technology-stack)
 - [System Architecture](#system-architecture)
 - [Complete System Flow](#complete-system-flow)
-- [Complaint Registration & AI Pipeline](#complaint-registration--ai-pipeline)
-- [Geospatial & Ward Architecture](#geospatial--ward-architecture)
-- [Authentication & Access Control](#authentication--access-control)
+- [Complaint Registration Flow](#complaint-registration-flow)
+- [Complaint Registration Sequence](#complaint-registration-sequence)
+- [GPS → Ward → Officer Flow](#gps--ward--officer-flow)
+- [Admin Workflow](#admin-workflow)
+- [Ward Officer Workflow](#ward-officer-workflow)
+- [Complaint Resolution Flow](#complaint-resolution-flow)
+- [Complaint Resolution Sequence](#complaint-resolution-sequence)
+- [Citizen CityMap Flow](#citizen-citymap-flow)
+- [Authentication Flow](#authentication-flow)
+- [Google Authentication Flow](#google-authentication-flow)
+- [Image Upload Flow](#image-upload-flow)
+- [Database Architecture & ER Diagram](#database-architecture--er-diagram)
+- [Ward & Geospatial Architecture](#ward--geospatial-architecture)
 - [Notification Architecture](#notification-architecture)
-- [Complaint Lifecycle & Workflow](#complaint-lifecycle--workflow)
-- [Map Systems Architecture](#map-systems-architecture)
-- [Database Architecture & Schemas](#database-architecture--schemas)
+- [API Architecture](#api-architecture)
+- [Frontend Architecture](#frontend-architecture)
+- [Security & Authorization Flow](#security--authorization-flow)
+- [Complete End-to-End Sequence](#complete-end-to-end-sequence)
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
 - [Environment Variables](#environment-variables)
 - [Local Development Setup](#local-development-setup)
 - [Build & Deployment](#build--deployment)
-- [Security & Known Considerations](#security--known-considerations)
+- [Important Design Decisions](#important-design-decisions)
 - [Data Sources](#data-sources)
-- [Technical Decisions & Rationale](#technical-decisions--rationale)
 - [How to Explain This Project in an Interview](#how-to-explain-this-project-in-an-interview)
-- [Future Roadmap](#future-roadmap)
+- [Future Improvements](#future-improvements)
 
 ---
 
 ## Project Overview
 
-**Faultline AI** is designed to solve a critical civic problem: citizens encounter infrastructure degradation (potholes, garbage accumulation, street light outages, water leakage), but reporting, ward determination, officer allocation, status tracking, and verification are often disconnected and inefficient.
+**Faultline AI** is designed to solve a common civic problem: citizens encounter infrastructure degradation (potholes, garbage accumulation, streetlight outages, water leakage), but reporting, ward determination, officer allocation, status tracking, and resolution verification are often disconnected.
 
-Faultline AI closes this loop by establishing an end-to-end automated workflow:
-
-```
-Citizen GPS → GeoJSON Point → MongoDB $geoIntersects → Authoritative Ward
-    ↓
-Google Gemini AI Image Analysis → Severity/Priority Scoring
-    ↓
-Cloudinary Image Storage → MongoDB Complaint Record
-    ↓
-Multi-Channel Notification (Twilio SMS/WhatsApp + Nodemailer Email)
-    ↓
-Admin Assignment → Ward Officer Dashboard → Resolution → Citizen Verification
-```
+Faultline AI creates a single automated workflow where:
+1. A citizen submits an infrastructure complaint photo with GPS coordinates.
+2. The backend converts GPS coordinates into a GeoJSON `Point`.
+3. MongoDB `$geoIntersects` spatial query determines the authoritative municipal ward.
+4. Google Gemini AI analyzes the uploaded image to classify issue type, severity, and priority.
+5. The image is stored securely on Cloudinary.
+6. The complaint is saved in MongoDB and routed to the assigned Ward Officer.
+7. Asynchronous notifications (Twilio SMS/WhatsApp + Nodemailer Email) alert citizens upon registration and resolution.
+8. Citizens visualize their ward boundary and complaint markers on the interactive **CityMap**.
 
 ---
 
 ## Core Features
 
 ### 👤 Citizen / User
-- **Account Registration & Authentication**: Email/Password sign up and JWT HTTP-only cookie authentication.
-- **Google OAuth (Citizen-Only)**: Instant one-click Google authentication powered by Firebase Auth.
-- **AI-Assisted Issue Reporting**: Upload infrastructure photos with browser GPS coordinates.
-- **Automatic Ward Resolution**: Backend determines the municipal ward via spatial polygon intersection (`$geoIntersects`).
+- **Account Registration & Login**: Credentials-based sign up with JWT HTTP-only cookies.
+- **Google Authentication**: Instant one-click Google Login powered by Firebase Auth (restricted to Citizens).
+- **AI-Based Issue Reporting**: Submit infrastructure photos with browser GPS location.
+- **Automatic Backend Ward Detection**: Backend spatial polygon intersection (`$geoIntersects`) determines responsible ward.
+- **Gemini AI Damage Analysis**: Automated damage type classification, severity scoring (1-10), and priority mapping.
 - **Real-Time Status Tracking**: Monitor complaint progress (`PENDING` → `IN_PROGRESS` → `RESOLVED`).
-- **Interactive Citizen CityMap**:
-  - Displays authoritative stored MongoDB GeoJSON ward boundary.
-  - Plots exact complaint markers using actual report GPS coordinates.
-  - Filter by category, status, or severity.
-  - Integrated "Detect My Location" physical positioning.
-- **Automated Notifications**: Receive registration and resolution confirmations via SMS/WhatsApp and Email.
+- **Interactive Citizen CityMap**: Renders stored MongoDB GeoJSON ward boundary and plots real report GPS markers.
+- **Automated Notifications**: Non-blocking registration and resolution alerts via SMS/WhatsApp and Email.
 
 ### 🛡️ Municipal Admin
-- **Global Operations Dashboard**: View all reported infrastructure issues across the municipality.
-- **Ward Metrics & Summaries**: Monitor total, pending, in-progress, and resolved complaint counts per ward.
-- **Ward Officer Assignment**: Assign and reallocate officers to specific municipal wards.
-- **Interactive Admin Map**: Renders all official municipal ward polygons with issue hotspot markers.
-- **Report Lifecycle Management**: Update report statuses and remove invalid entries.
+- **Global Operations Dashboard**: View all reported infrastructure complaints across the municipality.
+- **Ward Summaries**: Track total, pending, in-progress, and resolved metrics per ward.
+- **Ward Officer Assignment**: Assign and manage officers mapped to specific municipal wards.
+- **Interactive Admin Map**: Renders all official municipal ward polygons with complaint markers.
 
 ### 👷 Ward Officer
 - **Ward-Filtered Dashboard**: Access complaints exclusively belonging to their assigned ward.
-- **Interactive Ward Officer Map**: Visualizes assigned ward boundaries and localized complaint pins.
-- **Status Workflow Execution**: Transition issue status from `PENDING` to `IN_PROGRESS` and `RESOLVED`.
-- **Automated Citizen Notification Trigger**: Status transitions to `RESOLVED` automatically trigger multi-channel citizen alerts.
+- **Interactive Officer Map**: Visualizes assigned ward boundaries and localized complaint pins.
+- **Status Workflow Execution**: Update complaint status from `PENDING` to `IN_PROGRESS` and `RESOLVED`.
+- **Automated Resolution Trigger**: Marking an issue as `RESOLVED` automatically fires citizen notifications.
 
 ---
 
 ## Technology Stack
 
-| Layer | Technologies Used |
+| Layer | Technology Used |
 |---|---|
-| **Frontend Tier** | React.js (v19), Vite (v7), Tailwind CSS (v4), Framer Motion, Lucide React, Redux Toolkit |
-| **Mapping & GIS** | React-Leaflet, Leaflet, OpenStreetMap Tiles, GeoJSON Standard (RFC 7946) |
-| **Backend Tier** | Node.js, Express.js (REST API) |
+| **Frontend** | React.js (v19), Tailwind CSS (v4), Framer Motion, Lucide React, Redux Toolkit |
+| **Maps & GIS** | React-Leaflet, Leaflet, OpenStreetMap Tiles, GeoJSON Standard (RFC 7946) |
+| **Backend** | Node.js, Express.js (REST API) |
 | **Database & ODM** | MongoDB (v8), Mongoose ODM with `2dsphere` Geospatial Indexing |
 | **Authentication** | JWT (JSON Web Tokens), HTTP-Only Lax Cookies, Firebase Auth (Google OAuth) |
 | **Artificial Intelligence** | Google Gemini AI (`@google/genai` v1.43) |
 | **Media Storage** | Cloudinary (v2 SDK) |
 | **Notifications** | Twilio SDK (SMS & WhatsApp), Nodemailer (Gmail SMTP) |
-| **Development Tools** | dotenv, Multer, Axios |
+| **Dev Tools** | dotenv, Multer, Axios |
 
 ---
 
 ## System Architecture
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                             CLIENT TIER                                │
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │                 React Single Page Application                  │   │
-│   │  (Redux Toolkit / Tailwind CSS / Framer Motion / Lucide Icons) │   │
-│   └──────┬─────────────────────────┬──────────────────────┬────────┘   │
-│          │                         │                      │            │
-│          ▼                         ▼                      ▼            │
-│   Authentication UI          React-Leaflet           Axios REST        │
-│   (SignIn / SignUp)          Interactive Maps        API Client        │
-└──────────┼─────────────────────────┼──────────────────────┼────────────┘
-           │                         │                      │
-           │                         │ HTTP / Cookie        │
-           ▼                         ▼                      ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                            APPLICATION TIER                            │
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │                    Node.js + Express REST API                  │   │
-│   └──────┬─────────────────────────┬──────────────────────┬────────┘   │
-│          │                         │                      │            │
-│          ▼                         ▼                      ▼            │
-│   JWT Auth Cookie          Role Middleware          Express Routers    │
-│   (isAuth)                 (isAdmin / isOfficer)    (Auth/Report/Admin)│
-│          │                         │                      │            │
-│          └─────────────────────────┼──────────────────────┘            │
-│                                    ▼                                   │
-│                          Controllers & Services                        │
-│             (reportController, adminController, notificationService)   │
-└──────────┬─────────────────────────┬──────────────────────┬────────────┘
-           │                         │                      │
-           ▼                         ▼                      ▼
-┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────────┐
-│    DATABASE TIER     │  │     EXTERNAL AI      │  │   NOTIFICATION &   │
-│                      │  │       SERVICES       │  │   MEDIA SERVICES   │
-│   MongoDB Instance   │  │                      │  │                    │
-│ ├─ User Collection   │  │  Google Gemini AI    │  │  Cloudinary Media  │
-│ ├─ Report Collection │  │  (Damage & Severity) │  │  Twilio SMS/WA     │
-│ ├─ Ward Collection   │  └──────────────────────┘  │  Nodemailer Email  │
-│ └─ WardOfficer Coll. │                            └────────────────────┘
-└──────────────────────┘
+```mermaid
+flowchart TD
+    USER([Citizen / User])
+    ADMIN([Admin])
+    OFFICER([Ward Officer])
+
+    subgraph FRONTEND["Frontend Tier - React"]
+        UI["React Application"]
+        AXIOS["Axios API Layer"]
+        MAP["React-Leaflet Maps"]
+        AUTH_UI["Authentication UI"]
+    end
+
+    subgraph BACKEND["Application Server - Node.js + Express"]
+        ROUTES["Express Routes"]
+        AUTH["JWT / Cookie Authentication"]
+        ROLE["Role Authorization"]
+        CONTROLLER["Controllers Layer"]
+        REPORT["Report Service"]
+        WARD["Ward / GeoSpatial Service"]
+        NOTIFY["Centralized Notification Service"]
+    end
+
+    subgraph DATABASE["Database Tier"]
+        MONGO[("MongoDB")]
+        USER_MODEL["User"]
+        REPORT_MODEL["Report"]
+        WARD_MODEL["Ward"]
+        OFFICER_MODEL["WardOfficer"]
+    end
+
+    subgraph AI["AI Service"]
+        GEMINI["Google Gemini AI"]
+    end
+
+    subgraph STORAGE["Cloud Storage"]
+        CLOUDINARY["Cloudinary"]
+    end
+
+    subgraph NOTIFICATIONS["Notification Services"]
+        TWILIO["Twilio SMS / WhatsApp"]
+        SMTP["Nodemailer / Gmail SMTP"]
+    end
+
+    subgraph MAP_SERVICE["Map Services"]
+        OSM["OpenStreetMap Tiles"]
+        GEOJSON["Stored GeoJSON Ward Geometry"]
+    end
+
+    USER --> UI
+    ADMIN --> UI
+    OFFICER --> UI
+
+    UI --> AXIOS
+    AUTH_UI --> AXIOS
+    MAP --> AXIOS
+
+    AXIOS --> ROUTES
+    ROUTES --> AUTH
+    AUTH --> ROLE
+    ROLE --> CONTROLLER
+
+    CONTROLLER --> REPORT
+    CONTROLLER --> WARD
+    CONTROLLER --> NOTIFY
+
+    REPORT --> GEMINI
+    REPORT --> CLOUDINARY
+    REPORT --> MONGO
+
+    WARD --> MONGO
+    MONGO --> USER_MODEL
+    MONGO --> REPORT_MODEL
+    MONGO --> WARD_MODEL
+    MONGO --> OFFICER_MODEL
+
+    WARD_MODEL --> GEOJSON
+    MAP --> OSM
+
+    NOTIFY --> TWILIO
+    NOTIFY --> SMTP
 ```
 
 ---
@@ -149,260 +189,734 @@ Admin Assignment → Ward Officer Dashboard → Resolution → Citizen Verificat
 
 ```mermaid
 flowchart TD
-    CITIZEN([Citizen User])
-    ADMIN([Municipal Admin])
+    CITIZEN([Citizen])
+    ADMIN([Admin])
     OFFICER([Ward Officer])
 
-    CITIZEN --> AUTH["Authentication (JWT Cookie / Google OAuth)"]
+    CITIZEN --> AUTH["Authentication"]
     ADMIN --> AUTH
     OFFICER --> AUTH
 
-    AUTH --> REST["Express REST API"]
+    AUTH --> JWT["JWT + HTTP Cookie"]
 
-    REST --> REPORT_CTRL["Report Controller"]
-    REPORT_CTRL --> GPS_VAL["GPS Coordinate Validation"]
-    GPS_VAL --> GEO_POINT["Create GeoJSON Point [lng, lat]"]
+    JWT --> API["Express REST API"]
 
-    GEO_POINT --> SPATIAL["MongoDB $geoIntersects Query"]
-    SPATIAL --> WARD_MATCH["Authoritative Ward Identification"]
+    API --> REPORT["Complaint Controller"]
 
-    WARD_MATCH --> AI_PIPE["Google Gemini 2.5 AI Analysis"]
-    AI_PIPE --> AI_RES["Damage Type + Severity + Confidence"]
+    REPORT --> GPS["GPS Validation"]
+    GPS --> GEO["GeoJSON Point"]
 
-    AI_RES --> CLOUD_UP["Cloudinary Image Upload"]
-    CLOUD_UP --> DB_SAVE["Save Report Document in MongoDB"]
+    GEO --> SPATIAL["MongoDB $geoIntersects"]
+    SPATIAL --> WARD["Authoritative Ward"]
 
-    DB_SAVE --> REG_NOTIFY["Trigger Registration Notifications"]
-    REG_NOTIFY --> TW1["Twilio SMS / WhatsApp"]
-    REG_NOTIFY --> MAIL1["Nodemailer Email"]
+    WARD --> AI["Gemini AI"]
+    AI --> ANALYSIS["Issue Type + Severity + Confidence"]
 
-    DB_SAVE --> ADMIN_DASH["Admin Dashboard View"]
-    ADMIN_DASH --> ASSIGN_OFFICER["Assign Officer to Ward"]
+    ANALYSIS --> IMAGE["Cloudinary Image Storage"]
 
-    ASSIGN_OFFICER --> OFFICER_DASH["Ward Officer Dashboard View"]
-    OFFICER_DASH --> STATUS_TRANS["Status Transition: PENDING → IN_PROGRESS → RESOLVED"]
+    IMAGE --> SAVE["Create Report in MongoDB"]
 
-    STATUS_TRANS --> RES_NOTIFY["Trigger Resolution Notifications"]
-    RES_NOTIFY --> TW2["Twilio SMS / WhatsApp"]
-    RES_NOTIFY --> MAIL2["Nodemailer Email"]
+    SAVE --> REGISTER["Complaint Registered"]
 
-    STATUS_TRANS --> CITYMAP["Citizen CityMap Update"]
-    CITYMAP --> BOUNDARY["Render Stored Ward Polygon"]
-    CITYMAP --> PINS["Plot Complaint Pins at Real GPS"]
+    REGISTER --> NOTIFY1["Registration Notification"]
+    NOTIFY1 --> SMS1["Twilio SMS / WhatsApp"]
+    NOTIFY1 --> EMAIL1["Nodemailer Email"]
+
+    SAVE --> ADMIN_PANEL["Admin Dashboard"]
+
+    ADMIN_PANEL --> ASSIGN["Assign Ward Officer"]
+
+    ASSIGN --> OFFICER_PANEL["Ward Officer Dashboard"]
+
+    OFFICER_PANEL --> STATUS["PENDING → IN_PROGRESS → RESOLVED"]
+
+    STATUS --> UPDATE["Update Report in MongoDB"]
+
+    UPDATE --> NOTIFY2["Resolution Notification"]
+
+    NOTIFY2 --> SMS2["Twilio SMS / WhatsApp"]
+    NOTIFY2 --> EMAIL2["Nodemailer Email"]
+
+    UPDATE --> CITYMAP["Citizen CityMap"]
+
+    CITYMAP --> USER_WARD["User Ward Boundary"]
+    CITYMAP --> USER_REPORTS["User Complaint Markers"]
 ```
 
 ---
 
-## Complaint Registration & AI Pipeline
+## Complaint Registration Flow
 
-The complaint registration flow is **backend-authoritative**. The client frontend cannot spoof or manually select the municipal ward.
+```mermaid
+flowchart TD
+    START([Citizen Submits Complaint]) --> IMAGE["Upload Image"]
+    IMAGE --> GPS["Receive Latitude + Longitude"]
+
+    GPS --> VALIDATE{"Valid Image + GPS?"}
+
+    VALIDATE -- No --> ERROR["HTTP 400"]
+    VALIDATE -- Yes --> POINT["Create GeoJSON Point<br/>[longitude, latitude]"]
+
+    POINT --> WARD_QUERY["MongoDB $geoIntersects"]
+
+    WARD_QUERY --> MATCH{"Ward Found?"}
+
+    MATCH -- No --> WARD_ERROR["HTTP 400<br/>Unable to determine ward"]
+
+    MATCH -- Yes --> WARD["Authoritative Ward Identified"]
+
+    WARD --> BASE64["Convert Image to Base64"]
+
+    BASE64 --> GEMINI["Google Gemini AI"]
+
+    GEMINI --> AI_RESULT["Damage Type + Severity + Confidence"]
+
+    AI_RESULT --> PRIORITY["Calculate Priority<br/>LOW / MEDIUM / HIGH"]
+
+    PRIORITY --> CLOUDINARY["Upload Image to Cloudinary"]
+
+    CLOUDINARY --> CREATE["Create Report in MongoDB"]
+
+    CREATE --> NOTIFY["Registration Notification"]
+
+    NOTIFY --> TWILIO["Twilio"]
+    NOTIFY --> EMAIL["Nodemailer"]
+
+    CREATE --> SUCCESS([HTTP 201<br/>Complaint Registered])
+```
+
+---
+
+## Complaint Registration Sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Citizen as Citizen User
+
+    actor Citizen as Citizen / User
     participant FE as React Frontend
     participant BE as Express Backend
+    participant AUTH as JWT Auth Middleware
     participant DB as MongoDB
-    participant AI as Google Gemini AI
+    participant AI as Google Gemini
     participant CDN as Cloudinary
     participant NS as Notification Service
     participant TW as Twilio
     participant MAIL as Nodemailer
 
-    Citizen->>FE: Upload Photo + Get Geolocation
-    FE->>BE: POST /report/report-submit/report (Multipart)
-    BE->>BE: Validate Image, Latitude & Longitude
-    BE->>BE: Construct GeoJSON Point [longitude, latitude]
-    BE->>DB: $geoIntersects Query on Ward Collection
-    DB-->>BE: Matched Authoritative Ward (e.g. Ward 5 / Vaghodia Taluka)
-    
-    BE->>AI: generateContent(Image Base64 + Schema Prompt)
-    AI-->>BE: { damageType, severity, confidence }
-    BE->>BE: Calculate Priority Level (LOW / MEDIUM / HIGH)
-    
-    BE->>CDN: Upload Image Stream
-    CDN-->>BE: Secure Image URL
-    
-    BE->>DB: Report.create(Authoritative Data)
-    DB-->>BE: Saved Report Document
-    
-    BE->>NS: sendComplaintRegisteredNotification()
-    par Twilio Alert
-        NS->>TW: Send SMS / WhatsApp Message
-        TW-->>NS: Sent Status
-    and Email Alert
-        NS->>MAIL: Send HTML Registration Email
-        MAIL-->>NS: Sent Status
+    Citizen->>FE: Submit Complaint
+    FE->>BE: POST Report API<br/>Image + GPS + Address
+
+    BE->>AUTH: Validate JWT Cookie
+    AUTH-->>BE: Authenticated User
+
+    BE->>BE: Validate Image + Latitude + Longitude
+
+    BE->>BE: Create GeoJSON Point<br/>[longitude, latitude]
+
+    BE->>DB: $geoIntersects Ward Lookup
+    DB-->>BE: Matching Ward
+
+    BE->>AI: Send Image for Damage Analysis
+    AI-->>BE: Damage Type + Severity + Confidence
+
+    BE->>BE: Calculate Priority
+
+    BE->>CDN: Upload Complaint Image
+    CDN-->>BE: Cloudinary Image URL
+
+    BE->>DB: Report.create()
+    DB-->>BE: Report Created
+
+    BE->>NS: Registration Notification
+
+    NS->>TW: Send SMS / WhatsApp
+    TW-->>NS: Delivery Attempt
+
+    NS->>MAIL: Send Registration Email
+    MAIL-->>NS: Delivery Attempt
+
+    BE-->>FE: HTTP 201 + Created Report
+    FE-->>Citizen: Complaint Registered
+```
+
+---
+
+## GPS → Ward → Officer Flow
+
+```mermaid
+flowchart LR
+    GPS["Citizen GPS<br/>Latitude + Longitude"]
+        --> POINT["GeoJSON Point<br/>[longitude, latitude]"]
+
+    POINT --> MONGO["MongoDB<br/>$geoIntersects"]
+
+    MONGO --> WARD["Authoritative Ward"]
+
+    WARD --> REPORT["Report.location.ward"]
+
+    REPORT --> MAPPING["WardOfficer Mapping"]
+
+    MAPPING --> OFFICER["Assigned Ward Officer"]
+
+    OFFICER --> DASHBOARD["Officer Dashboard"]
+
+    DASHBOARD --> PROCESS["Process Complaint"]
+
+    PROCESS --> RESOLVED["RESOLVED"]
+
+    RESOLVED --> CITIZEN["Citizen Notification"]
+```
+
+---
+
+## Admin Workflow
+
+```mermaid
+flowchart TD
+    ADMIN([Admin Login])
+        --> AUTH["JWT Authentication"]
+
+    AUTH --> DASHBOARD["Admin Dashboard"]
+
+    DASHBOARD --> REPORTS["View All Reports"]
+
+    DASHBOARD --> WARDS["View Ward Data"]
+
+    DASHBOARD --> OFFICERS["View Officers"]
+
+    WARDS --> SUMMARY["Ward Summary"]
+
+    OFFICERS --> ASSIGN["Assign Officer to Ward"]
+
+    ASSIGN --> MAPPING["WardOfficer Mapping"]
+
+    MAPPING --> OFFICER["Officer Assigned"]
+
+    REPORTS --> STATUS["Monitor Complaint Status"]
+
+    STATUS --> RESOLVE["Resolved Complaints"]
+```
+
+---
+
+## Ward Officer Workflow
+
+```mermaid
+flowchart TD
+    OFFICER([Ward Officer Login])
+        --> AUTH["JWT Authentication"]
+
+    AUTH --> MAPPING["Find WardOfficer Mapping"]
+
+    MAPPING --> WARD["Assigned Ward"]
+
+    WARD --> REPORTS["Fetch Reports for Assigned Ward"]
+
+    REPORTS --> VIEW["View Complaint"]
+
+    VIEW --> PROCESS["Process Complaint"]
+
+    PROCESS --> IN_PROGRESS["IN_PROGRESS"]
+
+    IN_PROGRESS --> RESOLVE["RESOLVED"]
+
+    RESOLVE --> DB["Update MongoDB"]
+
+    DB --> NOTIFY["Citizen Resolution Notification"]
+```
+
+---
+
+## Complaint Resolution Flow
+
+```mermaid
+flowchart TD
+    START([Admin / Ward Officer Updates Status])
+        --> FETCH["Fetch Existing Report"]
+
+    FETCH --> CHECK{"Valid Status?"}
+
+    CHECK -- No --> ERROR["HTTP 400"]
+
+    CHECK -- Yes --> UPDATE["Update Report Status"]
+
+    UPDATE --> DB["MongoDB"]
+
+    DB --> RESOLVED{"Newly RESOLVED?"}
+
+    RESOLVED -- No --> SUCCESS([HTTP 200])
+
+    RESOLVED -- Yes --> SERVICE["Centralized Notification Service"]
+
+    SERVICE --> TWILIO["Twilio SMS / WhatsApp"]
+    SERVICE --> EMAIL["Nodemailer Email"]
+
+    TWILIO --> SUCCESS
+    EMAIL --> SUCCESS
+```
+
+---
+
+## Complaint Resolution Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor Officer as Admin / Ward Officer
+    participant FE as React Dashboard
+    participant BE as Express Backend
+    participant AUTH as JWT Auth Middleware
+    participant DB as MongoDB
+    participant NS as Notification Service
+    participant TW as Twilio
+    participant MAIL as Nodemailer
+    actor Citizen as Citizen
+
+    Officer->>FE: Change Complaint Status
+
+    FE->>BE: PATCH Report Status
+
+    BE->>AUTH: Validate JWT Cookie
+    AUTH-->>BE: Authorized User
+
+    BE->>DB: Fetch Existing Report
+    DB-->>BE: Existing Report
+
+    BE->>BE: Validate Status
+
+    BE->>DB: Update Report Status
+    DB-->>BE: Updated Report
+
+    BE-->>FE: HTTP 200 + Updated Report
+
+    alt Newly transitioned to RESOLVED
+        BE->>NS: Resolution Notification
+
+        NS->>TW: Send SMS / WhatsApp
+        TW-->>NS: Delivery Attempt
+
+        NS->>MAIL: Send Resolution Email
+        MAIL-->>NS: Delivery Attempt
+
+        NS-->>BE: Notification Processing Complete
     end
-    
-    BE-->>FE: HTTP 201 Created + Report Payload
-    FE-->>Citizen: Complaint Successfully Registered
-```
 
-### AI Analysis Specification (Google Gemini)
-- **Model**: `gemini-2.5-flash`
-- **Output Schema**: JSON Object containing `damageType`, `severity` (1-10 scale), and `confidence` (0.0 - 1.0).
-- **Supported Issue Types**: `POTHOLE`, `ROAD_CRACK`, `GARBAGE`, `STREETLIGHT`, `WATER_LEAK`, `OTHER`.
-- **Priority Matrix**:
-  - `HIGH`: Severity $\ge 7$ or Issue Type = `POTHOLE` / `WATER_LEAK` with high confidence.
-  - `MEDIUM`: Severity $4 - 6$.
-  - `LOW`: Severity $\le 3$.
+    BE-->>Citizen: Resolution Notification
+```
 
 ---
 
-## Geospatial & Ward Architecture
+## Citizen CityMap Flow
 
-### 1. The GeoJSON Standard vs Leaflet Coordinate Convention
-Crucial GIS distinction enforced across the codebase:
-- **MongoDB GeoJSON / RFC 7946 Standard**: `[longitude, latitude]` order.
-- **Leaflet Map Rendering Standard**: `[latitude, longitude]` order.
+```mermaid
+flowchart TD
+    LOGIN["Authenticated Citizen"]
+        --> REPORTS["Fetch User Reports"]
 
-The backend performs spatial operations strictly using `[longitude, latitude]`. The utility `geojsonToLatLngs()` converts coordinates to `[latitude, longitude]` when passing arrays to Leaflet map components.
+    REPORTS --> WARD_NAME["Read report.location.ward"]
 
-### 2. MongoDB `$geoIntersects` Spatial Lookup
-Every `Ward` document in MongoDB maintains a GeoJSON `geometry` field (`Polygon` or `MultiPolygon`) with a 2D Sphere Index (`2dsphere`).
+    WARD_NAME --> WARD_API["Fetch Ward Geometry"]
 
-```javascript
-// Spatial query executed inside createReport controller:
-const matchedWard = await Ward.findOne({
-  geometry: {
-    $geoIntersects: {
-      $geometry: {
-        type: 'Point',
-        coordinates: [longitude, latitude] // [lng, lat]
-      }
+    WARD_API --> MATCH["Find matching wardName"]
+
+    MATCH --> GEOJSON["MongoDB GeoJSON Geometry"]
+
+    GEOJSON --> CONVERT["Convert<br/>[longitude, latitude]<br/>→ [latitude, longitude]"]
+
+    CONVERT --> POLYGON["React-Leaflet Polygon"]
+
+    REPORTS --> FILTER["Filter Reports by User Ward"]
+
+    FILTER --> GPS["Real report.location.latitude<br/>Real report.location.longitude"]
+
+    GPS --> MARKERS["Complaint Markers"]
+
+    POLYGON --> MAP["Citizen CityMap"]
+    MARKERS --> MAP
+```
+
+---
+
+## Authentication Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor User as User
+    participant FE as React Frontend
+    participant BE as Express Backend
+    participant AUTH as Auth Controller
+    participant DB as MongoDB
+    participant COOKIE as Browser Cookie
+
+    User->>FE: Login
+    FE->>BE: Authentication Request
+
+    BE->>AUTH: Validate Credentials
+
+    AUTH->>DB: Find User
+    DB-->>AUTH: User Record
+
+    AUTH->>AUTH: Verify Credentials
+
+    AUTH->>AUTH: Generate JWT
+
+    AUTH-->>BE: JWT Token
+
+    BE->>COOKIE: Set HTTP Cookie
+    BE-->>FE: Authentication Response
+
+    FE->>BE: Protected API Request
+
+    BE->>COOKIE: Read JWT Cookie
+    COOKIE-->>BE: JWT
+
+    BE->>AUTH: Verify JWT
+
+    AUTH-->>BE: req.userId / Authenticated User
+
+    BE-->>FE: Protected Resource
+```
+
+---
+
+## Google Authentication Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor User as Citizen
+    participant FE as React SignIn / SignUp
+    participant GOOGLE as Google / Firebase Auth
+    participant BE as Express Backend
+    participant AUTH as googleAuth Controller
+    participant DB as MongoDB
+    participant COOKIE as Browser Cookie
+
+    User->>FE: Click Google Login
+
+    FE->>GOOGLE: signInWithPopup()
+    GOOGLE-->>FE: Google User
+
+    FE->>BE: POST Google Auth<br/>Email + Name
+
+    BE->>AUTH: googleAuth()
+
+    AUTH->>DB: Find User by Email
+
+    alt Existing Citizen
+        DB-->>AUTH: User role = user
+    else New Citizen
+        AUTH->>DB: Create User
+        DB-->>AUTH: role = user
+    end
+
+    AUTH->>AUTH: Generate JWT
+
+    AUTH-->>BE: JWT
+
+    BE->>COOKIE: Set token Cookie
+
+    BE-->>FE: Authenticated User
+
+    FE-->>User: Logged In
+```
+
+---
+
+## Image Upload Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor Citizen as Citizen
+    participant FE as React Frontend
+    participant BE as Express Backend
+    participant CLOUD as Cloudinary
+    participant DB as MongoDB
+
+    Citizen->>FE: Select Complaint Image
+
+    FE->>BE: Multipart Request
+
+    BE->>BE: Validate Uploaded File
+
+    BE->>CLOUD: Upload Image
+
+    CLOUD-->>BE: Image URL
+
+    BE->>DB: Save imageUrl in Report
+
+    DB-->>BE: Report Updated
+
+    BE-->>FE: Created / Updated Report
+
+    FE-->>Citizen: Complaint Image Available
+```
+
+---
+
+## Database Architecture & ER Diagram
+
+```mermaid
+erDiagram
+    USER ||--o{ REPORT : creates
+    USER ||--o| WARD_OFFICER : assigned
+    WARD ||--o{ WARD_OFFICER : maps
+    WARD_OFFICER }o--|| USER : officer
+
+    USER {
+        ObjectId _id
+        string name
+        string email
+        string mobile
+        string role
+        string assignedWard
     }
-  }
-})
+
+    REPORT {
+        ObjectId _id
+        ObjectId reportedBy
+        string imageUrl
+        number latitude
+        number longitude
+        string address
+        string ward
+        string detectedType
+        number confidence
+        number severityScore
+        string priorityLevel
+        string status
+    }
+
+    WARD {
+        ObjectId _id
+        number wardNumber
+        string wardName
+        string geometryType
+        array coordinates
+    }
+
+    WARD_OFFICER {
+        ObjectId _id
+        ObjectId officer
+        string ward
+    }
 ```
 
 ---
 
-## Authentication & Access Control
+## Ward & Geospatial Architecture
 
-Authentication uses **JSON Web Tokens (JWT)** delivered via **HTTP-only cookies** (`token`).
+```mermaid
+flowchart TD
+    GPS["Latitude + Longitude"]
+        --> ORDER["GeoJSON Order<br/>[longitude, latitude]"]
 
+    ORDER --> POINT["Point Geometry"]
+
+    POINT --> QUERY["MongoDB $geoIntersects"]
+
+    QUERY --> INDEX["2dsphere Index"]
+
+    INDEX --> GEOMETRY["Ward GeoJSON Polygon"]
+
+    GEOMETRY --> MATCH["Matching Ward"]
+
+    MATCH --> REPORT["Report.location.ward"]
 ```
-Login Request → Credentials Verified → JWT Generated → Set-Cookie: token (HTTP-Only)
-                                                               │
-Authenticated Request ← Request Header Cookie ← Browser Stores Cookie
-       │
-isAuth Middleware → Verifies Token → Attaches req.userId → Access Granted
-```
-
-### Role-Based Access Control (RBAC) Matrix
-
-| Endpoint Group | Citizen (`user`) | Ward Officer (`officer`) | Municipal Admin (`admin`) |
-|---|:---:|:---:|:---:|
-| `POST /api/auth/google-auth` | ✅ | ❌ | ❌ |
-| `POST /report/report-submit/report` | ✅ | ❌ | ❌ |
-| `GET /report/report-submit/reports` | ✅ (Own Reports) | ❌ | ❌ |
-| `GET /api/admin/wards` | ✅ (Read-Only) | ✅ (Read-Only) | ✅ (Read-Only) |
-| `GET /api/admin/officer/reports` | ❌ | ✅ (Assigned Ward) | ✅ |
-| `PATCH /api/admin/officer/reports/:id/status` | ❌ | ✅ (Assigned Ward) | ✅ |
-| `GET /api/admin/reports` | ❌ | ❌ | ✅ (All Wards) |
-| `POST /api/admin/ward-officer` | ❌ | ❌ | ✅ |
-| `GET /api/admin/users` | ❌ | ❌ | ✅ |
-
-> [!IMPORTANT]
-> **Google OAuth Restriction**: Google Authentication (via Firebase Auth) is strictly restricted to **Citizen/User** registration and login. Admins and Ward Officers must authenticate via dedicated credential routes.
 
 ---
 
 ## Notification Architecture
 
-Notifications are managed by a **Centralized Non-Blocking Notification Service** ([`backend/utils/notificationService.js`](file:///d:/FaultLine-changed/backend/utils/notificationService.js)).
+```mermaid
+flowchart TD
+    EVENT["Complaint Event"]
 
-```
-                  ┌──────────────────────────────────────────────┐
-                  │    Centralized Notification Service          │
-                  │   (sendComplaintRegisteredNotification /     │
-                  │    sendComplaintResolvedNotification)        │
-                  └──────────────┬────────────────┬──────────────┘
-                                 │                │
-                        (Async Non-Blocking)  (Async Non-Blocking)
-                                 │                │
-                                 ▼                ▼
-                      ┌──────────────────┐  ┌──────────────────┐
-                      │    Twilio SDK    │  │    Nodemailer    │
-                      │ (SMS & WhatsApp) │  │   (Gmail SMTP)   │
-                      └────────┬─────────┘  └────────┬─────────┘
-                               │                     │
-                               ▼                     ▼
-                      ┌────────────────────────────────────────┐
-                      │            Citizen Recipient           │
-                      └────────────────────────────────────────┘
-```
+    EVENT --> REGISTER{"Event Type"}
 
-- **Non-Blocking Safety**: All notification attempts use `.catch(...)` error handlers. Twilio or SMTP network errors **never** fail complaint creation or status updates.
+    REGISTER -- Registered --> REG["Complaint Registered"]
+    REGISTER -- Resolved --> RES["Complaint Resolved"]
 
----
+    REG --> SERVICE["Notification Service"]
+    RES --> SERVICE
 
-## Complaint Lifecycle & Workflow
+    SERVICE --> TWILIO["Twilio"]
+    SERVICE --> EMAIL["Nodemailer"]
 
-```
-┌───────────┐         Ward Officer / Admin           ┌──────────────┐
-│  PENDING  │ ─────────────────────────────────────> │ IN_PROGRESS  │
-└───────────┘                                        └──────┬───────┘
-                                                            │
-                                                     Resolves Issue
-                                                            │
-                                                            ▼
-                                                     ┌──────────────┐
-                                                     │   RESOLVED   │
-                                                     └──────┬───────┘
-                                                            │
-                                             Triggers Resolution Alerts
-                                            (Twilio + Nodemailer Email)
+    TWILIO --> SMS["SMS / WhatsApp"]
+    EMAIL --> MAIL["Email"]
+
+    SMS --> USER["Citizen"]
+    MAIL --> USER
 ```
 
 ---
 
-## Map Systems Architecture
+## API Architecture
 
-### 1. Citizen CityMap ([`CityMap.jsx`](file:///d:/FaultLine-changed/frontend/src/pages/CityMap.jsx))
-- **Ward Boundary**: Fetches stored GeoJSON polygon for the user's ward (`report.location.ward`) from `GET /api/admin/wards` and renders a `<Polygon />`.
-- **Complaint Pins**: Places `<Marker />` elements at the complaint's actual GPS coordinates (`latitude`, `longitude`).
-- **Filters**: Category (`detectedType`), Status (`status`), and Severity (`priorityLevel`).
+```mermaid
+flowchart LR
+    CLIENT["React Client"]
+        --> ROUTE["Express Route"]
 
-### 2. Admin Map ([`AdminMap.jsx`](file:///d:/FaultLine-changed/frontend/src/pages/AdminMap.jsx))
-- **Sidebar List**: Displays **all 12 official VMC municipal wards** (plus Test Ward #99), displaying exact complaint metrics per ward (even when total complaints = 0).
-- **Ward Highlighting**: Renders stored MongoDB GeoJSON geometries and fits map bounds upon ward selection.
+    ROUTE --> AUTH["Authentication Middleware"]
 
-### 3. Ward Officer Map ([`OfficerMap.jsx`](file:///d:/FaultLine-changed/frontend/src/pages/OfficerMap.jsx))
-- **Assigned Ward View**: Renders the stored GeoJSON boundary for `user.assignedWard` and auto-fits map bounds.
-- **Localized Issues**: Displays markers for all complaints belonging to the officer's ward.
+    AUTH --> ROLE["Role Authorization"]
+
+    ROLE --> CONTROLLER["Controller"]
+
+    CONTROLLER --> SERVICE["Business Logic"]
+
+    SERVICE --> MODEL["Mongoose Model"]
+
+    MODEL --> DB[("MongoDB")]
+
+    SERVICE --> EXTERNAL["External Services"]
+
+    EXTERNAL --> GEMINI["Gemini"]
+    EXTERNAL --> CLOUDINARY["Cloudinary"]
+    EXTERNAL --> TWILIO["Twilio"]
+    EXTERNAL --> EMAIL["Nodemailer"]
+```
 
 ---
 
-## Database Architecture & Schemas
+## Frontend Architecture
 
+```mermaid
+flowchart TD
+    APP["React Application"]
+
+    APP --> NAV["Navbar / Navigation"]
+
+    APP --> AUTH_PAGES["Authentication Pages"]
+
+    APP --> CITIZEN["Citizen Pages"]
+
+    APP --> ADMIN["Admin Pages"]
+
+    APP --> OFFICER["Officer Pages"]
+
+    CITIZEN --> REPORT_PAGE["Report Issue"]
+    CITIZEN --> TRACK["Track Status"]
+    CITIZEN --> CITYMAP["CityMap"]
+
+    ADMIN --> ADMIN_MAP["AdminMap"]
+    ADMIN --> ADMIN_DASH["Admin Dashboard"]
+
+    OFFICER --> OFFICER_MAP["OfficerMap"]
+    OFFICER --> OFFICER_DASH["Officer Dashboard"]
+
+    CITYMAP --> API["Axios"]
+    ADMIN_MAP --> API
+    OFFICER_MAP --> API
+    REPORT_PAGE --> API
+    TRACK --> API
+
+    API --> BACKEND["Express Backend"]
 ```
-┌─────────────────────────┐          1:N           ┌──────────────────────────┐
-│          User           │ ─────────────────────> │          Report          │
-├─────────────────────────┤                        ├──────────────────────────┤
-│ _id: ObjectId          │                        │ _id: ObjectId            │
-│ name: String            │                        │ reportedBy: Ref(User)    │
-│ email: String (Unique)  │                        │ imageUrl: String         │
-│ password: String        │                        │ location.latitude: Num   │
-│ role: Enum              │                        │ location.longitude: Num  │
-│ assignedWard: String    │                        │ location.address: String │
-└─────────────────────────┘                        │ location.ward: String    │
-                                                   │ aiAnalysis.detectedType  │
-                                                   │ priorityLevel: Enum      │
-                                                   │ status: Enum             │
-                                                   └──────────────────────────┘
 
-┌─────────────────────────┐          1:1           ┌──────────────────────────┐
-│          Ward           │ ─────────────────────> │       WardOfficer        │
-├─────────────────────────┤                        ├──────────────────────────┤
-│ _id: ObjectId          │                        │ _id: ObjectId            │
-│ wardNumber: Number (Unq)│                        │ officer: Ref(User)       │
-│ wardName: String        │                        │ ward: String (Unique)    │
-│ geometry: GeoJSON       │                        └──────────────────────────┘
-│ (2dsphere Index)        │
-└─────────────────────────┘
+---
+
+## Security & Authorization Flow
+
+```mermaid
+flowchart TD
+    REQUEST["Incoming Request"]
+        --> COOKIE["JWT Cookie"]
+
+    COOKIE --> VALID{"Valid JWT?"}
+
+    VALID -- No --> UNAUTH["401 Unauthorized"]
+
+    VALID -- Yes --> USER["Authenticated User"]
+
+    USER --> ROLE{"Required Role?"}
+
+    ROLE -- Citizen --> CITIZEN["Citizen Resource"]
+    ROLE -- Admin --> ADMIN["Admin Resource"]
+    ROLE -- Officer --> OFFICER["Officer Resource"]
+
+    ROLE -- Invalid --> FORBIDDEN["403 Forbidden"]
+```
+
+---
+
+## Complete End-to-End Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor C as Citizen
+    participant F as React Frontend
+    participant B as Express Backend
+    participant M as MongoDB
+    participant G as Gemini
+    participant CL as Cloudinary
+    participant A as Admin
+    participant O as Ward Officer
+    participant N as Notification Service
+    participant T as Twilio
+    participant E as Nodemailer
+
+    C->>F: Submit image + GPS
+    F->>B: Create Complaint API
+
+    B->>M: GeoIntersects GPS with Ward
+    M-->>B: Responsible Ward
+
+    B->>G: Analyze Image
+    G-->>B: Issue + Severity + Confidence
+
+    B->>CL: Upload Image
+    CL-->>B: Image URL
+
+    B->>M: Save Report
+    M-->>B: Report Created
+
+    B->>N: Registration Notification
+    N->>T: SMS / WhatsApp
+    N->>E: Email
+
+    B-->>F: Complaint Created
+    F-->>C: Complaint Registered
+
+    A->>F: View Complaint
+    A->>B: Assign Officer
+    B->>M: Save WardOfficer Mapping
+
+    O->>F: Open Assigned Ward
+    F->>B: Fetch Ward Reports
+    B->>M: Query Reports
+    M-->>B: Ward Reports
+    B-->>F: Reports
+
+    O->>F: Mark Complaint Resolved
+    F->>B: Update Status
+    B->>M: Save RESOLVED
+
+    B->>N: Resolution Notification
+    N->>T: SMS / WhatsApp
+    N->>E: Email
+
+    C->>F: Open CityMap
+    F->>B: Fetch User Reports
+    B-->>F: User Reports
+
+    F->>B: Fetch Ward Geometry
+    B->>M: Read Ward GeoJSON
+    M-->>B: Ward Geometry
+    B-->>F: GeoJSON Boundary
+
+    F-->>C: Ward Boundary + Complaint Markers
 ```
 
 ---
@@ -410,25 +924,25 @@ Notifications are managed by a **Centralized Non-Blocking Notification Service**
 ## API Reference
 
 ### Authentication APIs (`/api/auth`)
-- `POST /api/auth/signup`: Register a new citizen account.
-- `POST /api/auth/signin`: Authenticate citizen, officer, or admin credentials.
-- `POST /api/auth/google-auth`: Authenticate/register citizen via Google OAuth token payload.
+- `POST /api/auth/signup`: Register citizen account.
+- `POST /api/auth/signin`: Authenticate user credentials (returns JWT cookie).
+- `POST /api/auth/google-auth`: Authenticate/register citizen via Google OAuth.
 - `POST /api/auth/signout`: Clear HTTP-only authentication cookie.
 - `POST /api/auth/send-otp`: Trigger password reset OTP email.
-- `POST /api/auth/verify-otp`: Validate 6-digit OTP code.
-- `POST /api/auth/reset-password`: Reset user password.
+- `POST /api/auth/verify-otp`: Verify 6-digit OTP code.
+- `POST /api/auth/reset-password`: Update password.
 
 ### Report APIs (`/report/report-submit`)
-- `POST /report/report-submit/report`: Create a new civic issue report (Multipart image + GPS).
-- `GET /report/report-submit/reports`: Fetch authenticated user's submitted reports.
+- `POST /report/report-submit/report`: Submit complaint photo + GPS location (`isAuth`).
+- `GET /report/report-submit/reports`: Fetch logged-in user's submitted complaints (`isAuth`).
 
 ### Admin & Officer APIs (`/api/admin`)
-- `GET /api/admin/wards`: Fetch all stored municipal ward documents with GeoJSON geometries (Read-only, `isAuth`).
-- `GET /api/admin/reports`: Fetch all complaints across all wards (Admin only).
-- `PATCH /api/admin/reports/:id/status`: Update complaint status (Admin/Officer).
-- `GET /api/admin/ward-summary`: Summary metrics grouped by municipal ward (Admin only).
-- `POST /api/admin/ward-officer`: Map an officer to a ward (Admin only).
-- `GET /api/admin/officer/reports`: Fetch complaints for officer's assigned ward (Admin/Officer).
+- `GET /api/admin/wards`: Fetch all municipal ward GeoJSON documents (`isAuth`).
+- `GET /api/admin/reports`: Fetch all complaints across all wards (`isAdmin`).
+- `PATCH /api/admin/reports/:id/status`: Update complaint status (`isAdminOrOfficer`).
+- `GET /api/admin/ward-summary`: Ward complaint metrics (`isAdmin`).
+- `POST /api/admin/ward-officer`: Assign officer to ward (`isAdmin`).
+- `GET /api/admin/officer/reports`: Fetch complaints for officer's assigned ward (`isAdminOrOfficer`).
 
 ---
 
@@ -528,32 +1042,27 @@ TWILIO_PHONE_NUMBER=your_twilio_phone_number
 
 ## Local Development Setup
 
-### 1. Prerequisites
-- Node.js (v18+)
-- MongoDB Community Server running locally or a MongoDB Atlas URI
-
-### 2. Backend Setup
+### 1. Backend Setup
 ```bash
 cd backend
 npm install
 # Configure backend/.env file
 npm start
 ```
-*The backend connects to MongoDB and automatically seeds the 12 official VMC municipal ward polygons + Test Ward #99 on startup.*
+*The backend automatically seeds the 12 official VMC municipal ward polygons + Test Ward #99 on startup.*
 
-### 3. Frontend Setup
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-*Access the application in your browser at `http://localhost:5173`.*
+*Access application in browser at `http://localhost:5173`.*
 
 ---
 
 ## Build & Deployment
 
-### Production Build Verification
 ```bash
 cd frontend
 npm run build
@@ -564,25 +1073,18 @@ npm run build
 
 ---
 
-## Security & Known Considerations
+## Important Design Decisions
 
-1. **HTTP-Only Cookies**: JWT tokens are transmitted via HTTP-only, `sameSite: 'lax'` cookies to mitigate Cross-Site Scripting (XSS) risks.
-2. **Server-Side Ward Verification**: Ward determination is performed via `$geoIntersects` spatial queries on the backend to prevent client-side coordinate spoofing.
-3. **Transient AI Rate Limits**: In case of temporary Google Cloud Gemini 503 overload spikes, backend controllers capture API exceptions cleanly without crashing the server.
+1. **Backend Authoritative Ward Assignment**: GPS coordinates are converted into GeoJSON `Point` and queried against stored ward geometries using `$geoIntersects`. The client cannot choose or spoof municipal wards.
+2. **Standardized Coordinates**: Stored as `[longitude, latitude]` for MongoDB 2dsphere indexing and dynamically converted to `[latitude, longitude]` for Leaflet maps.
+3. **Non-Blocking Notifications**: Twilio and Nodemailer dispatch asynchronously to ensure network/gateway timeouts do not block database transactions.
+4. **Authentic Ward Geometries**: Uses the official multi-vertex GeoJSON dataset derived from BharatAtlas/DataMeet.
 
 ---
 
 ## Data Sources
 
-- **Vadodara Administrative Ward Boundaries**: Derived from the open-source **BharatAtlas / DataMeet** Vadodara Ward Map dataset (`https://bharatlas.com/view/wards_vadodara`), under CC-BY-4.0.
-
----
-
-## Technical Decisions & Rationale
-
-- **Why MongoDB `$geoIntersects`?** Allows instant 2D sphere spatial evaluation of `Point` coordinates against complex multi-vertex polygons.
-- **Why Non-Blocking Notifications?** Ensures that third-party SMS or email gateway latencies never slow down or fail core database transactions.
-- **Why Cloudinary for Images?** Offloads binary file handling from Node.js servers and provides CDN delivery for fast client rendering.
+- **Vadodara Administrative Ward Boundaries**: Derived from the open-source **BharatAtlas / DataMeet** Vadodara Ward Map dataset (`https://bharatlas.com/view/wards_vadodara`), licensed under CC-BY-4.0.
 
 ---
 
@@ -592,12 +1094,12 @@ npm run build
 
 ---
 
-## Future Roadmap
+## Future Improvements
 
-- [ ] Automated duplicate complaint detection within spatial radius ($100\text{m}$).
-- [ ] Citizen upvoting & endorsement system for high-priority issues.
+- [ ] Spatial radius duplicate complaint detection ($100\text{m}$).
+- [ ] Citizen upvoting & priority endorsement.
 - [ ] Real-time WebSocket notifications for ward officers.
-- [ ] Public civic performance analytics dashboard.
+- [ ] Public municipal resolution performance dashboard.
 
 ---
 
