@@ -16,7 +16,7 @@ import OfficerMap from './pages/OfficerMap'
 import OfficerIssues from './pages/OfficerIssues'
 import ProtectedRoute from './components/ProtectedRoute'
 
-export const serverUrl = 'http://localhost:8000'
+export const serverUrl = 'https://faultline-ai-lo8f.vercel.app'
 
 function App () {
   useGetCurrentUser()
