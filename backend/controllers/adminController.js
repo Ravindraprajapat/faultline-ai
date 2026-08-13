@@ -85,11 +85,16 @@ export const assignOfficerToWard = async (req, res) => {
       if (!officer || officer.role !== 'officer') {
         return res.status(400).json({ message: 'Invalid officer' })
       }
+      // Clear this officer from any previous ward mapping
+      await WardOfficer.updateMany(
+        { officer: officerId, ward: { $ne: ward } },
+        { officer: null }
+      )
       // Update officer's assignedWard to match
       await User.findByIdAndUpdate(officerId, { assignedWard: ward })
     }
 
-    // Upsert: create or update the ward-officer mapping
+    // Upsert: create or update the ward-officer mapping for this ward
     const mapping = await WardOfficer.findOneAndUpdate(
       { ward },
       { officer: officerId || null },
@@ -115,7 +120,11 @@ export const getWardOfficers = async (req, res) => {
 // Officer: get only their ward's reports using WardOfficer mapping
 export const getOfficerReports = async (req, res) => {
   try {
-    const officer = req.user
+    const officer = req.user || (await User.findById(req.userId))
+
+    if (!officer || (officer.role !== 'officer' && officer.role !== 'admin')) {
+      return res.status(403).json({ message: 'Officer or Admin access required' })
+    }
 
     // Find ward assigned to this officer via WardOfficer mapping
     const mapping = await WardOfficer.findOne({ officer: officer._id })
@@ -124,7 +133,7 @@ export const getOfficerReports = async (req, res) => {
     const wardFull = mapping?.ward || officer.assignedWard
 
     if (!wardFull) {
-      return res.status(400).json({ message: 'No ward assigned to this officer' })
+      return res.status(200).json({ success: true, reports: [], ward: '' })
     }
 
     // Extract suburb part for flexible matching
@@ -134,6 +143,8 @@ export const getOfficerReports = async (req, res) => {
 
     const reports = await Report.find({
       $or: [
+        { 'location.ward': wardFull },
+        { 'location.ward': wardSuburb },
         { 'location.ward': { $regex: wardSuburb, $options: 'i' } },
         { 'location.ward': { $regex: wardFull, $options: 'i' } }
       ]
