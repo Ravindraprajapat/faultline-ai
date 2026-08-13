@@ -3,6 +3,19 @@ import bcrypt from 'bcryptjs'
 import { genToken } from '../utils/token.js'
 import { sendOtpMail } from '../utils/nodemailer.js'
 
+const getCookieOptions = () => {
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    process.env.RENDER === 'true' ||
+    !!process.env.RENDER_SERVICE_ID
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  }
+}
+
 export const signUp = async (req, res) => {
   try {
     const { name, email, password, mobile, role, assignedWard } = req.body
@@ -38,12 +51,7 @@ export const signUp = async (req, res) => {
     })
 
     const token = await genToken(user._id)
-    res.cookie('token', token, {
-      secure: false,
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true
-    })
+    res.cookie('token', token, getCookieOptions())
 
     return res.status(201).json(user)
   } catch (error) {
@@ -64,12 +72,7 @@ export const signIn = async (req, res) => {
     }
 
     const token = await genToken(user._id)
-    res.cookie('token', token, {
-      secure: false,
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true
-    })
+    res.cookie('token', token, getCookieOptions())
 
     return res.status(200).json(user)
   } catch (error) {
@@ -79,7 +82,8 @@ export const signIn = async (req, res) => {
 
 export const signOut = async (req, res) => {
   try {
-    res.clearCookie('token')
+    const opts = getCookieOptions()
+    res.clearCookie('token', { ...opts, maxAge: 0 })
     return res.status(200).json({ message: 'sign out success' })
   } catch (error) {
     return res.status(500).json('sign out error', error)
@@ -189,12 +193,7 @@ export const googleAuth = async (req, res) => {
 
     const token = await genToken(user._id);
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie("token", token, getCookieOptions());
 
     return res.status(200).json({
       success: true,

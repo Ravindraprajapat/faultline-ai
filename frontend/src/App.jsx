@@ -16,7 +16,11 @@ import OfficerMap from './pages/OfficerMap'
 import OfficerIssues from './pages/OfficerIssues'
 import ProtectedRoute from './components/ProtectedRoute'
 
-export const serverUrl = 'http://localhost:8000'
+export const serverUrl =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.MODE === 'production'
+    ? 'https://faultline-ai.onrender.com'
+    : 'http://localhost:8000')
 
 function App () {
   useGetCurrentUser()
