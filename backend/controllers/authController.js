@@ -53,7 +53,9 @@ export const signUp = async (req, res) => {
     const token = await genToken(user._id)
     res.cookie('token', token, getCookieOptions())
 
-    return res.status(201).json(user)
+    const userObj = user.toObject()
+    userObj.token = token
+    return res.status(201).json(userObj)
   } catch (error) {
     return res.status(500).json('sing up error', error)
   }
@@ -74,7 +76,9 @@ export const signIn = async (req, res) => {
     const token = await genToken(user._id)
     res.cookie('token', token, getCookieOptions())
 
-    return res.status(200).json(user)
+    const userObj = user.toObject()
+    userObj.token = token
+    return res.status(200).json(userObj)
   } catch (error) {
     return res.status(500).json(`error in will signin ${error}`)
   }
@@ -197,6 +201,7 @@ export const googleAuth = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      token,
       user
     });
 

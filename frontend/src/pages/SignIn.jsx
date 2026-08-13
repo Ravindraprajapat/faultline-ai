@@ -33,6 +33,7 @@ const SignIn = () => {
         { withCredentials: true }
       )
       const user = result?.data
+      if (user?.token) localStorage.setItem('token', user.token)
       dispatch(setUserData(user))
 
       if (loginRole === 'admin') {
@@ -75,7 +76,8 @@ const SignIn = () => {
         },
         { withCredentials: true }
       )
-      dispatch(setUserData(data.user))
+      if (data?.token) localStorage.setItem('token', data.token)
+      dispatch(setUserData(data.user || data))
       navigate('/')
     } catch (error) {
       console.log(error)

@@ -48,6 +48,7 @@ const SignUp = () => {
       const result = await axios.post(`${serverUrl}/api/auth/signup`, payload, {
         withCredentials: true
       })
+      if (result?.data?.token) localStorage.setItem('token', result.data.token)
       dispatch(setUserData(result.data))
 
       if (role === 'admin') navigate('/admin/issues')
@@ -68,7 +69,8 @@ const SignUp = () => {
         { name: result.user.displayName, email: result.user.email, mobile },
         { withCredentials: true }
       )
-      dispatch(setUserData(data))
+      if (data?.token) localStorage.setItem('token', data.token)
+      dispatch(setUserData(data.user || data))
       navigate('/')
     } catch (err) {
       console.log('error in google signUp', err)
