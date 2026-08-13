@@ -6,7 +6,7 @@ import axios from 'axios'
 import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
 import { MapPin, ChevronDown, ChevronUp, X, User, RefreshCw } from 'lucide-react'
-import { fetchWardPolygon } from '../utils/wardPolygon'
+import { fetchWardPolygon, geojsonToLatLngs } from '../utils/wardPolygon'
 import 'leaflet/dist/leaflet.css'
 
 /* ── Fix default icon path (prevents broken img) ── */
@@ -47,19 +47,13 @@ function FitBounds({ polygon }) {
   const map = useMap()
   useEffect(() => {
     if (polygon && polygon.length > 0) {
-      map.fitBounds(L.latLngBounds(polygon), { padding: [30, 30] })
+      const flatPoints = Array.isArray(polygon[0][0])
+        ? polygon.flat(1)
+        : polygon
+      map.fitBounds(L.latLngBounds(flatPoints), { padding: [30, 30] })
     }
   }, [polygon, map])
   return null
-}
-
-function getWardCentroid(reports) {
-  const valid = reports.filter(r => r.location?.latitude && r.location?.longitude)
-  if (!valid.length) return [22.3072, 73.1812]
-  return [
-    valid.reduce((s, r) => s + r.location.latitude, 0) / valid.length,
-    valid.reduce((s, r) => s + r.location.longitude, 0) / valid.length
-  ]
 }
 
 const STATUS_COLORS = {
@@ -70,6 +64,7 @@ const STATUS_COLORS = {
 
 const AdminMap = () => {
   const [reports, setReports] = useState([])
+  const [dbWards, setDbWards] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedWard, setSelectedWard] = useState(null)
   const [wardFilter, setWardFilter] = useState('ALL')
@@ -80,55 +75,68 @@ const AdminMap = () => {
   const fetchReports = async () => {
     setLoading(true)
     try {
-      const { data } = await axios.get(`${serverUrl}/api/admin/reports`, { withCredentials: true })
-      setReports(data.reports)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+      const [{ data: repData }, { data: wardData }] = await Promise.all([
+        axios.get(`${serverUrl}/api/admin/reports`, { withCredentials: true }),
+        axios.get(`${serverUrl}/api/admin/wards`, { withCredentials: true })
+      ])
+      setReports(repData.reports || [])
+      setDbWards(wardData.wards || [])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchReports() }, [])
 
-  /* ── Group by ward ── */
-  const wardGroups = useMemo(() => {
-    const groups = {}
-    reports.forEach(r => {
-      const ward = r.location?.ward
-      if (!ward || ward === 'Unknown') return
-      if (!groups[ward]) groups[ward] = []
-      groups[ward].push(r)
-    })
-    return groups
-  }, [reports])
-
-  /* ── Sort wards by pending+inProgress desc ── */
+  /* ── Map stored DB Wards to sidebar list (showing ALL 12 wards + test ward) ── */
   const sortedWards = useMemo(() => {
-    return Object.entries(wardGroups)
-      .map(([ward, reps]) => ({
-        ward,
+    if (!dbWards.length) return []
+    return dbWards.map(w => {
+      const wardNameLabel = w.wardNumber === 99 ? w.wardName : `Ward ${w.wardNumber} - ${w.wardName}`
+      const reps = reports.filter(r => {
+        const rw = r.location?.ward || ''
+        return rw === w.wardName || rw === wardNameLabel || rw.toLowerCase().includes(w.wardName.toLowerCase())
+      })
+      const polygonLatLngs = geojsonToLatLngs(w.geometry)
+      let centroid = [22.3072, 73.1812]
+      if (polygonLatLngs && polygonLatLngs.length > 0) {
+        centroid = [
+          polygonLatLngs.reduce((s, p) => s + p[0], 0) / polygonLatLngs.length,
+          polygonLatLngs.reduce((s, p) => s + p[1], 0) / polygonLatLngs.length
+        ]
+      }
+      return {
+        ward: wardNameLabel,
+        rawWardName: w.wardName,
+        wardNumber: w.wardNumber,
+        polygon: polygonLatLngs,
         pending: reps.filter(r => r.status === 'PENDING').length,
         inProgress: reps.filter(r => r.status === 'IN_PROGRESS').length,
         resolved: reps.filter(r => r.status === 'RESOLVED').length,
         total: reps.length,
-        centroid: getWardCentroid(reps)
-      }))
-      .sort((a, b) => (b.pending + b.inProgress) - (a.pending + a.inProgress))
-  }, [wardGroups])
+        centroid,
+        reports: reps
+      }
+    })
+  }, [dbWards, reports])
 
-  const maxPendingWard = sortedWards[0]?.ward
+  const maxPendingWard = sortedWards.find(w => w.pending > 0)?.ward
 
-  const loadWardPolygon = async (wardName) => {
-    if (activeWard === wardName) return   // already loaded
-    setActiveWard(wardName)
-    setActiveWardPolygon(null)
-    const poly = await fetchWardPolygon(wardName)
-    setActiveWardPolygon(poly)
+  const selectWardItem = (item) => {
+    setActiveWard(item.ward)
+    setActiveWardPolygon(item.polygon)
+    setSelectedWard(item.ward)
+    setWardFilter('ALL')
   }
 
   const wardDetailReports = useMemo(() => {
     if (!selectedWard) return []
-    const reps = wardGroups[selectedWard] || []
+    const wardObj = sortedWards.find(w => w.ward === selectedWard)
+    const reps = wardObj?.reports || []
     return wardFilter === 'ALL' ? reps : reps.filter(r => r.status === wardFilter)
-  }, [selectedWard, wardGroups, wardFilter])
+  }, [selectedWard, sortedWards, wardFilter])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
@@ -172,7 +180,9 @@ const AdminMap = () => {
               <div className="p-6 text-slate-400 text-sm text-center">No ward data found</div>
             ) : (
               <div className="p-3 space-y-2">
-                {sortedWards.map(({ ward, pending, inProgress, resolved, total }) => (
+                {sortedWards.map(item => {
+                  const { ward, pending, inProgress, resolved, total } = item
+                  return (
                   <div key={ward}
                     className={`rounded-xl border transition ${
                       expandedWard === ward
@@ -182,7 +192,10 @@ const AdminMap = () => {
 
                     {/* Ward header row */}
                     <div className="flex items-center justify-between p-3 cursor-pointer"
-                      onClick={() => setExpandedWard(expandedWard === ward ? null : ward)}>
+                      onClick={() => {
+                        setExpandedWard(expandedWard === ward ? null : ward)
+                        selectWardItem(item)
+                      }}>
                       <div className="flex items-center gap-2">
                         {ward === maxPendingWard && (
                           <span className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" title="Most pending issues" />
@@ -209,9 +222,7 @@ const AdminMap = () => {
                       <button
                         onClick={e => {
                           e.stopPropagation()
-                          setSelectedWard(ward)
-                          setWardFilter('ALL')
-                          loadWardPolygon(ward)
+                          selectWardItem(item)
                         }}
                         className="w-full text-xs bg-sky-500 hover:bg-sky-600 text-white py-1.5 rounded-lg font-medium transition cursor-pointer">
                         View Details
@@ -246,7 +257,7 @@ const AdminMap = () => {
                       )}
                     </AnimatePresence>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </motion.div>
@@ -285,7 +296,8 @@ const AdminMap = () => {
                   </Polygon>
                 )}
 
-                {sortedWards.map(({ ward, centroid, total, pending, inProgress, resolved }) => {
+                {sortedWards.map(item => {
+                  const { ward, centroid, total, pending, inProgress, resolved } = item
                   const isHotspot = ward === maxPendingWard
                   const pinColor = isHotspot ? '#ef4444' : '#0ea5e9'
 
@@ -294,7 +306,7 @@ const AdminMap = () => {
                       key={ward}
                       position={centroid}
                       icon={makePinIcon(pinColor, total)}
-                      eventHandlers={{ click: () => loadWardPolygon(ward) }}
+                      eventHandlers={{ click: () => selectWardItem(item) }}
                     >
                       <Popup minWidth={200}>
                         <div className="py-1">

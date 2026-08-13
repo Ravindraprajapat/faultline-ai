@@ -2,8 +2,9 @@ import fs from 'fs'
 import dotenv from 'dotenv'
 import { GoogleGenAI } from '@google/genai'
 import Report from '../model/Report.js'
+import Ward from '../model/Ward.js'
 import uploadOnCloudinary from '../utils/cloudinary.js'
-import { sendMessageReport } from '../utils/twillio.js'
+import { sendComplaintRegisteredNotification } from '../utils/notificationService.js'
 import User from '../model/User.js'
 
 dotenv.config()
@@ -18,6 +19,42 @@ export const createReport = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'Image is required' })
     }
+
+    const latitude = Number(req.body.latitude)
+    const longitude = Number(req.body.longitude)
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path)
+      }
+      return res.status(400).json({ success: false, message: 'Valid latitude and longitude are required.' })
+    }
+
+    // 🔹 Authoritative Backend GPS -> GeoJSON Point -> MongoDB $geoIntersects Ward Lookup
+    const geoPoint = {
+      type: 'Point',
+      coordinates: [longitude, latitude] // GeoJSON order: [longitude, latitude]
+    }
+
+    const matchedWard = await Ward.findOne({
+      geometry: {
+        $geoIntersects: {
+          $geometry: geoPoint
+        }
+      }
+    })
+
+    if (!matchedWard) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path)
+      }
+      return res.status(400).json({
+        success: false,
+        message: 'Unable to determine the municipal ward from the provided location. Location must be within Vadodara municipal limits.'
+      })
+    }
+
+    const authoritativeWard = matchedWard.wardName
 
     const localFilePath = req.file.path
 
@@ -75,15 +112,15 @@ Return ONLY JSON:
     // ✅ STEP 4: Upload to Cloudinary
     const imageUrl = await uploadOnCloudinary(localFilePath)
 
-    // ✅ STEP 5: Save Report
+    // ✅ STEP 5: Save Report with Authoritative Ward
     const report = await Report.create({
       reportedBy: req.userId,
       imageUrl,
       location: {
-        latitude: Number(req.body.latitude),
-        longitude: Number(req.body.longitude),
+        latitude,
+        longitude,
         address: req.body.address || '',
-        ward: req.body.ward || 'Unknown'
+        ward: authoritativeWard // Authoritative backend-calculated ward
       },
       aiAnalysis: {
         detectedType: parsed.damageType || 'OTHER',
@@ -93,15 +130,13 @@ Return ONLY JSON:
       priorityLevel
     })
 
-    // send message using twilio
-    const userId = req.userId
-    const user = await User.findById(userId)
-
-    if (!user) {
-     console.log("not working ")
+    // Centralized Registration Notification (Twilio + Nodemailer)
+    const user = await User.findById(req.userId)
+    if (user) {
+      sendComplaintRegisteredNotification({ user, report }).catch(err => {
+        console.error('Non-blocking registration notification error:', err)
+      })
     }
-    const number = user.mobile
-    sendMessageReport(number)
 
     res.status(201).json({
       success: true,
@@ -143,12 +178,3 @@ export const getUserReports = async (req, res) => {
     })
   }
 }
-
-// text: `
-// Respond ONLY in JSON:
-// {
-//   "damageType": "POTHOLE | ROAD_CRACK | GARBAGE | STREETLIGHT | WATER_LEAK | OTHER",
-//   "severity": number (1-10),
-//   "confidence": number (0-1)
-// }
-// `,

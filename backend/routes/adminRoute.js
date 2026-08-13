@@ -10,10 +10,14 @@ import {
   updateReportStatus,
   getOfficers,
   getAdminUsers,
-  deleteWardlessReports
+  deleteWardlessReports,
+  getWards
 } from '../controllers/adminController.js'
 
 const adminRouter = express.Router()
+
+// Wards endpoint (read-only for all authenticated users)
+adminRouter.get('/wards', isAuth, getWards)
 
 // Admin only
 adminRouter.get('/reports', isAuth, isAdmin, getAllReports)

@@ -7,7 +7,7 @@ import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
 import { Filter, MapPin, RefreshCw } from 'lucide-react'
 import { useSelector } from 'react-redux'
-import { fetchWardPolygon } from '../utils/wardPolygon'
+import { fetchWardPolygon, geojsonToLatLngs } from '../utils/wardPolygon'
 import 'leaflet/dist/leaflet.css'
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -50,8 +50,10 @@ function FitBounds({ polygon }) {
   const map = useMap()
   useEffect(() => {
     if (polygon && polygon.length > 0) {
-      const bounds = L.latLngBounds(polygon)
-      map.fitBounds(bounds, { padding: [30, 30] })
+      const flatPoints = Array.isArray(polygon[0][0])
+        ? polygon.flat(1)
+        : polygon
+      map.fitBounds(L.latLngBounds(flatPoints), { padding: [30, 30] })
     }
   }, [polygon, map])
   return null
@@ -77,15 +79,24 @@ const OfficerMap = () => {
     setLoading(true)
     setRefreshing(true)
     try {
-      const { data } = await axios.get(`${serverUrl}/api/admin/officer/reports`, {
-        withCredentials: true
-      })
-      setReports(data.reports)
-      const wardName = data.ward || userData?.assignedWard || ''
+      const [{ data: repData }, { data: wardsData }] = await Promise.all([
+        axios.get(`${serverUrl}/api/admin/officer/reports`, { withCredentials: true }),
+        axios.get(`${serverUrl}/api/admin/wards`, { withCredentials: true })
+      ])
+      setReports(repData.reports || [])
+      const wardName = repData.ward || userData?.assignedWard || ''
       setWard(wardName)
       setLastUpdated(new Date())
-      // Fetch ward boundary polygon
-      if (wardName) {
+
+      // Find matching stored Ward document from MongoDB
+      const matchedWardDoc = (wardsData.wards || []).find(w => {
+        const cleanWard = wardName.includes(' - ') ? wardName.split(' - ').slice(1).join(' - ').trim() : wardName.trim()
+        return w.wardName === cleanWard || w.wardName === wardName || cleanWard.toLowerCase().includes(w.wardName.toLowerCase())
+      })
+
+      if (matchedWardDoc) {
+        setWardPolygon(geojsonToLatLngs(matchedWardDoc.geometry))
+      } else if (wardName) {
         fetchWardPolygon(wardName).then(poly => setWardPolygon(poly))
       }
     } catch (e) {

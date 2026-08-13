@@ -137,10 +137,11 @@ const SignUp = () => {
           <div className="relative">
             <User size={18} className="absolute left-3 top-[11px] text-gray-400" />
             <input
+              type="text"
+              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition"
+              placeholder="Enter your name"
               value={fullName}
               onChange={e => setFullName(e.target.value)}
-              placeholder="Enter your full name"
-              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none transition"
             />
           </div>
         </motion.div>
@@ -149,22 +150,23 @@ const SignUp = () => {
         <motion.div
           initial={{ x: -40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
           className="mb-4"
         >
-          <label className="block text-gray-700 font-medium mb-1 text-left">Mobile</label>
+          <label className="block text-gray-700 font-medium mb-1 text-left">Mobile Number</label>
           <div className="relative">
             <Phone size={18} className="absolute left-3 top-[11px] text-gray-400" />
             <input
+              type="text"
+              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition"
+              placeholder="Enter 10-digit mobile number"
               value={mobile}
               onChange={e => setMobile(e.target.value)}
-              placeholder="Enter your mobile number"
-              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none transition"
             />
           </div>
         </motion.div>
 
-        {/* Ward selector — only for officer */}
+        {/* Ward Selector for Officer */}
         {role === 'officer' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -177,9 +179,9 @@ const SignUp = () => {
               <select
                 value={assignedWard}
                 onChange={e => setAssignedWard(e.target.value)}
-                className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none transition appearance-none bg-white cursor-pointer"
+                className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition bg-white"
               >
-                <option value="">Select your ward</option>
+                <option value="">Select Ward</option>
                 {VADODARA_WARDS.map(w => (
                   <option key={w} value={w}>{w}</option>
                 ))}
@@ -192,17 +194,18 @@ const SignUp = () => {
         <motion.div
           initial={{ x: -40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
           className="mb-4"
         >
           <label className="block text-gray-700 font-medium mb-1 text-left">Email</label>
           <div className="relative">
             <Mail size={18} className="absolute left-3 top-[11px] text-gray-400" />
             <input
+              type="email"
+              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition"
+              placeholder="Enter your email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none transition"
             />
           </div>
         </motion.div>
@@ -211,19 +214,18 @@ const SignUp = () => {
         <motion.div
           initial={{ x: -40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
-          className="mb-5"
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="mb-6"
         >
           <label className="block text-gray-700 font-medium mb-1 text-left">Password</label>
           <div className="relative">
             <Lock size={18} className="absolute left-3 top-[11px] text-gray-400" />
             <input
               type={showPassword ? 'text' : 'password'}
+              className="w-full border border-sky-200 rounded-lg pl-10 pr-10 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition"
+              placeholder="Min. 6 characters"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSignUp()}
-              placeholder="Enter a password"
-              className="w-full border border-sky-200 rounded-lg pl-10 pr-10 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none transition"
             />
             <button
               type="button"
@@ -238,36 +240,37 @@ const SignUp = () => {
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
-          className="w-full py-2 rounded-lg font-semibold text-white bg-sky-500 hover:bg-sky-600 shadow-md hover:shadow-lg focus:ring-2 focus:ring-sky-400 transition"
           onClick={handleSignUp}
+          className="w-full bg-sky-500 hover:bg-sky-600 font-semibold py-3 rounded-xl text-white transition shadow-md shadow-sky-200 cursor-pointer"
         >
-          Sign Up as {role === 'officer' ? 'Ward Officer' : role === 'admin' ? 'Admin' : 'User'}
+          Create {role === 'admin' ? 'Admin' : role === 'officer' ? 'Officer' : 'User'} Account
         </motion.button>
 
         {role === 'user' && (
           <>
             <div className="flex items-center my-6">
-              <div className="flex-1 h-px bg-gray-300" />
-              <span className="px-3 text-sm text-gray-500">or</span>
-              <div className="flex-1 h-px bg-gray-300" />
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="px-3 text-sm text-slate-400 font-medium">or</span>
+              <div className="flex-1 h-px bg-slate-200" />
             </div>
+
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              className="w-full flex items-center justify-center gap-3 border border-sky-200 rounded-lg py-2 bg-white hover:bg-gray-50 transition"
               onClick={handleGoogleSignUp}
+              className="w-full flex items-center justify-center gap-3 border border-sky-200 rounded-xl py-2.5 bg-white hover:bg-sky-50 transition cursor-pointer"
             >
               <FcGoogle size={20} />
-              Sign up using Google
+              <span className="font-medium text-slate-700 text-sm">Sign up using Google</span>
             </motion.button>
           </>
         )}
 
-        <p className="text-center mt-6">
+        <p className="text-center mt-6 text-sm text-slate-500">
           Already have an account?{' '}
           <span
-            className="text-sky-500 font-semibold cursor-pointer"
             onClick={() => navigate('/signin')}
+            className="text-sky-500 font-semibold cursor-pointer hover:underline"
           >
             Sign In
           </span>

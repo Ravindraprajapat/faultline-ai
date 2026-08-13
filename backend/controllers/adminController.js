@@ -1,6 +1,18 @@
 import Report from '../model/Report.js'
 import User from '../model/User.js'
 import WardOfficer from '../model/WardOfficer.js'
+import Ward from '../model/Ward.js'
+import { sendComplaintResolvedNotification } from '../utils/notificationService.js'
+
+// Admin / Officer: Get all stored Wards from MongoDB with GeoJSON geometry
+export const getWards = async (req, res) => {
+  try {
+    const wards = await Ward.find().sort({ wardNumber: 1 })
+    res.status(200).json({ success: true, wards })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
 
 // Admin: get ALL reports
 export const getAllReports = async (req, res) => {
@@ -147,11 +159,21 @@ export const updateReportStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' })
     }
 
+    const existingReport = await Report.findById(id)
+    if (!existingReport) return res.status(404).json({ message: 'Report not found' })
+
+    const isNewlyResolved = status === 'RESOLVED' && existingReport.status !== 'RESOLVED'
+
     const report = await Report.findByIdAndUpdate(id, { status }, { new: true })
       .populate('reportedBy', 'name email mobile')
       .populate('assignedTo', 'name email assignedWard')
 
-    if (!report) return res.status(404).json({ message: 'Report not found' })
+    // Trigger Resolution Notification (Twilio + Nodemailer) if newly resolved
+    if (isNewlyResolved && report?.reportedBy) {
+      sendComplaintResolvedNotification({ user: report.reportedBy, report }).catch(err => {
+        console.error('Non-blocking resolution notification error:', err)
+      })
+    }
 
     res.status(200).json({ success: true, report })
   } catch (error) {

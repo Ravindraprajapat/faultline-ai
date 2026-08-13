@@ -19,14 +19,15 @@ export async function fetchWardPolygon(wardName) {
   }
 }
 
-function geojsonToLatLngs(geojson) {
+export function geojsonToLatLngs(geojson) {
+  if (!geojson) return null
   if (geojson.type === 'Polygon') {
     return geojson.coordinates[0].map(([lng, lat]) => [lat, lng])
   }
   if (geojson.type === 'MultiPolygon') {
-    const rings = geojson.coordinates.map(p => p[0])
-    const largest = rings.reduce((a, b) => a.length > b.length ? a : b)
-    return largest.map(([lng, lat]) => [lat, lng])
+    return geojson.coordinates.map(polygon =>
+      polygon[0].map(([lng, lat]) => [lat, lng])
+    )
   }
   return null
 }
