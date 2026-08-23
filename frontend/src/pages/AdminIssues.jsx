@@ -275,16 +275,33 @@ const AdminIssues = () => {
                           </td>
                           <td className="px-5 py-4">
                             <div className="relative">
-                              <select
-                                value={w.officer?._id || ''}
-                                disabled={assigningWard === w.ward}
-                                onChange={e => handleAssignWardOfficer(w.ward, e.target.value)}
-                                className="appearance-none border border-slate-200 rounded-lg px-3 py-1.5 pr-7 text-xs focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white cursor-pointer disabled:opacity-50 min-w-[140px]">
-                                <option value="">Unassigned</option>
-                                {officers.map(o => (
-                                  <option key={o._id} value={o._id}>{o.name}</option>
-                                ))}
-                              </select>
+                              {(() => {
+                                const matchingOfficers = officers.filter(o => {
+                                  if (!o.assignedWard) return false
+                                  const oWard = o.assignedWard.trim().toLowerCase()
+                                  const wWard = w.ward.trim().toLowerCase()
+                                  const oSub = oWard.includes(' - ') ? oWard.split(' - ').slice(1).join(' - ').trim() : oWard
+                                  const wSub = wWard.includes(' - ') ? wWard.split(' - ').slice(1).join(' - ').trim() : wWard
+                                  return oWard === wWard || oSub === wSub
+                                })
+
+                                return (
+                                  <select
+                                    value={w.officer?._id || ''}
+                                    disabled={assigningWard === w.ward}
+                                    onChange={e => handleAssignWardOfficer(w.ward, e.target.value)}
+                                    className="appearance-none border border-slate-200 rounded-lg px-3 py-1.5 pr-7 text-xs focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white cursor-pointer disabled:opacity-50 min-w-[160px]">
+                                    <option value="">Unassigned</option>
+                                    {matchingOfficers.length === 0 ? (
+                                      <option value="" disabled>No officer assigned to this ward.</option>
+                                    ) : (
+                                      matchingOfficers.map(o => (
+                                        <option key={o._id} value={o._id}>{o.name}</option>
+                                      ))
+                                    )}
+                                  </select>
+                                )
+                              })()}
                               {assigningWard === w.ward
                                 ? <RefreshCw size={12} className="absolute right-2 top-2.5 text-sky-400 animate-spin pointer-events-none" />
                                 : <UserCheck size={12} className="absolute right-2 top-2.5 text-slate-400 pointer-events-none" />

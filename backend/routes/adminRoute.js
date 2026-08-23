@@ -16,8 +16,8 @@ import {
 
 const adminRouter = express.Router()
 
-// Wards endpoint (read-only for all authenticated users)
-adminRouter.get('/wards', isAuth, getWards)
+// Wards endpoint (read-only for all users including registration)
+adminRouter.get('/wards', getWards)
 
 // Admin only
 adminRouter.get('/reports', isAuth, isAdmin, getAllReports)

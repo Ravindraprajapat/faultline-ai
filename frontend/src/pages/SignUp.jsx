@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Eye, EyeOff, Lock, Mail, User, Phone, ShieldCheck, HardHat, MapPin } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -9,13 +9,6 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { auth } from '../../firebase.js'
 import { setUserData } from '../redux/userSlice.js'
 import { useDispatch } from 'react-redux'
-
-const VADODARA_WARDS = [
-  'Ward 1 - Wadi', 'Ward 2 - Harni', 'Ward 3 - Manjalpur', 'Ward 4 - Fatehgunj',
-  'Ward 5 - Sayajigunj', 'Ward 6 - Alkapuri', 'Ward 7 - Gotri', 'Ward 8 - Waghodia Road',
-  'Ward 9 - Makarpura', 'Ward 10 - Karelibaug', 'Ward 11 - Akota', 'Ward 12 - Sama',
-  'Ward 13 - Vasna', 'Ward 14 - Nizampura', 'Ward 15 - Gorwa'
-]
 
 const ROLES = [
   { key: 'user', label: 'User', icon: User, desc: 'Report infrastructure issues' },
@@ -31,9 +24,24 @@ const SignUp = () => {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('user')
   const [assignedWard, setAssignedWard] = useState('')
+  const [wards, setWards] = useState([])
   const [error, setError] = useState('')
   const dispatch = useDispatch()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const fetchWards = async () => {
+      try {
+        const { data } = await axios.get(`${serverUrl}/api/admin/wards`)
+        if (data?.wards) {
+          setWards(data.wards.map(w => w.wardName))
+        }
+      } catch (err) {
+        console.error('Error fetching wards:', err)
+      }
+    }
+    fetchWards()
+  }, [])
 
   const handleSignUp = async () => {
     setError('')
@@ -184,7 +192,7 @@ const SignUp = () => {
                 className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition bg-white"
               >
                 <option value="">Select Ward</option>
-                {VADODARA_WARDS.map(w => (
+                {wards.map(w => (
                   <option key={w} value={w}>{w}</option>
                 ))}
               </select>

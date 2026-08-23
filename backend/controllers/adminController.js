@@ -85,6 +85,20 @@ export const assignOfficerToWard = async (req, res) => {
       if (!officer || officer.role !== 'officer') {
         return res.status(400).json({ message: 'Invalid officer' })
       }
+
+      // Strict Ward Validation: officer.assignedWard must match ward
+      const normOfficerWard = officer.assignedWard ? officer.assignedWard.trim().toLowerCase() : ''
+      const normReqWard = ward.trim().toLowerCase()
+
+      const officerSuburb = normOfficerWard.includes(' - ') ? normOfficerWard.split(' - ').slice(1).join(' - ').trim() : normOfficerWard
+      const reqSuburb = normReqWard.includes(' - ') ? normReqWard.split(' - ').slice(1).join(' - ').trim() : normReqWard
+
+      const isMatch = normOfficerWard === normReqWard || (officerSuburb && reqSuburb && officerSuburb === reqSuburb)
+
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Officer does not belong to the complaint ward.' })
+      }
+
       // Clear this officer from any previous ward mapping
       await WardOfficer.updateMany(
         { officer: officerId, ward: { $ne: ward } },
