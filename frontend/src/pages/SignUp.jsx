@@ -32,12 +32,17 @@ const SignUp = () => {
   useEffect(() => {
     const fetchWards = async () => {
       try {
-        const { data } = await axios.get(`${serverUrl}/api/admin/wards`)
-        if (data?.wards) {
-          setWards(data.wards.map(w => w.wardName))
+        const res = await axios.get(`${serverUrl}/api/admin/wards`, { withCredentials: true })
+        const wardList = res.data?.wards || res.data || []
+        if (!Array.isArray(wardList) || wardList.length === 0) {
+          console.warn('WARD API RETURNED 0 WARDS', res.data)
+        } else {
+          const names = wardList.map(w => typeof w === 'string' ? w : (w.wardName || w.ward || '')).filter(Boolean)
+          console.log(`WARD API LOADED ${names.length} WARDS:`, names)
+          setWards(names)
         }
       } catch (err) {
-        console.error('Error fetching wards:', err)
+        console.error('WARD FETCH ERROR:', err?.response?.status ? `HTTP ${err.response.status}` : err.message, err?.response?.data || err)
       }
     }
     fetchWards()
