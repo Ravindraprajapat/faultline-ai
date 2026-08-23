@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Eye, EyeOff, Lock, Mail, User, Phone, ShieldCheck, HardHat, MapPin } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -9,6 +9,22 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { auth } from '../../firebase.js'
 import { setUserData } from '../redux/userSlice.js'
 import { useDispatch } from 'react-redux'
+
+const VADODARA_WARDS = [
+  'Nyay Mandir',
+  'Harni',
+  'Waghodia',
+  'Pratap Nagar',
+  'Raopura',
+  'Akota',
+  'Fatehgunj',
+  'Tin Rasta',
+  'Ajwa',
+  'Subhanpura',
+  'Vasna',
+  'Makarpura',
+  'Vaghodia Taluka'
+]
 
 const ROLES = [
   { key: 'user', label: 'User', icon: User, desc: 'Report infrastructure issues' },
@@ -24,29 +40,9 @@ const SignUp = () => {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('user')
   const [assignedWard, setAssignedWard] = useState('')
-  const [wards, setWards] = useState([])
   const [error, setError] = useState('')
   const dispatch = useDispatch()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    const fetchWards = async () => {
-      try {
-        const res = await axios.get(`${serverUrl}/api/admin/wards`, { withCredentials: true })
-        const wardList = res.data?.wards || res.data || []
-        if (!Array.isArray(wardList) || wardList.length === 0) {
-          console.warn('WARD API RETURNED 0 WARDS', res.data)
-        } else {
-          const names = wardList.map(w => typeof w === 'string' ? w : (w.wardName || w.ward || '')).filter(Boolean)
-          console.log(`WARD API LOADED ${names.length} WARDS:`, names)
-          setWards(names)
-        }
-      } catch (err) {
-        console.error('WARD FETCH ERROR:', err?.response?.status ? `HTTP ${err.response.status}` : err.message, err?.response?.data || err)
-      }
-    }
-    fetchWards()
-  }, [])
 
   const handleSignUp = async () => {
     setError('')
@@ -197,8 +193,10 @@ const SignUp = () => {
                 className="w-full border border-sky-200 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-500 transition bg-white"
               >
                 <option value="">Select Ward</option>
-                {wards.map(w => (
-                  <option key={w} value={w}>{w}</option>
+                {VADODARA_WARDS.map(ward => (
+                  <option key={ward} value={ward}>
+                    {ward}
+                  </option>
                 ))}
               </select>
             </div>
