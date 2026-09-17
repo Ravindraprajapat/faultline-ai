@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { serverUrl } from '../App'
 import Navbar from '../components/Navbar'
-import { Filter, RefreshCw, CheckCircle, Clock, AlertCircle, MapPin, ChevronDown } from 'lucide-react'
+import { Filter, RefreshCw, CheckCircle, Clock, AlertCircle, MapPin, ChevronDown, Navigation, X, Loader2 } from 'lucide-react'
 import { useSelector } from 'react-redux'
 
 const STATUS_COLORS = {
@@ -22,6 +22,20 @@ const PRIORITY_COLORS = {
   HIGH: 'bg-red-100 text-red-700',
   MEDIUM: 'bg-orange-100 text-orange-700',
   LOW: 'bg-gray-100 text-gray-600'
+}
+
+const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000 // Earth radius in meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
 }
 
 const BarChart = ({ pending, inProgress, resolved }) => {
@@ -86,6 +100,13 @@ const OfficerIssues = () => {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [updatingId, setUpdatingId] = useState(null)
 
+  // Resolution Live Location Modal State
+  const [resolveModalReport, setResolveModalReport] = useState(null)
+  const [gettingLocation, setGettingLocation] = useState(false)
+  const [capturedLocation, setCapturedLocation] = useState(null)
+  const [locationError, setLocationError] = useState('')
+  const [submittingResolve, setSubmittingResolve] = useState(false)
+
   const fetchReports = async () => {
     setLoading(true)
     setRefreshing(true)
@@ -106,17 +127,124 @@ const OfficerIssues = () => {
 
   useEffect(() => { fetchReports() }, [])
 
-  const handleStatusChange = async (id, newStatus) => {
-    setUpdatingId(id)
+  const handleOpenResolveModal = (report) => {
+    setResolveModalReport(report)
+    setCapturedLocation(null)
+    setLocationError('')
+    setGettingLocation(false)
+    setSubmittingResolve(false)
+  }
+
+  const handleCloseResolveModal = () => {
+    setResolveModalReport(null)
+    setCapturedLocation(null)
+    setLocationError('')
+    setGettingLocation(false)
+    setSubmittingResolve(false)
+  }
+
+  const handleGetLiveLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.')
+      return
+    }
+
+    setGettingLocation(true)
+    setLocationError('')
+    setCapturedLocation(null)
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        const compLat = resolveModalReport?.location?.latitude
+        const compLng = resolveModalReport?.location?.longitude
+
+        if (typeof compLat !== 'number' || typeof compLng !== 'number') {
+          setLocationError('Complaint location coordinates are invalid or missing.')
+          setGettingLocation(false)
+          return
+        }
+
+        const distance = calculateDistanceMeters(lat, lng, compLat, compLng)
+
+        if (distance > 50) {
+          setLocationError('Cannot resolve this complaint. You must be within 50 meters of the reported location.')
+        } else {
+          setCapturedLocation({
+            latitude: lat,
+            longitude: lng,
+            distance
+          })
+        }
+        setGettingLocation(false)
+      },
+      err => {
+        setGettingLocation(false)
+        if (err.code === 1) {
+          setLocationError('Location permission is required to resolve this complaint.')
+        } else {
+          setLocationError('Unable to get your live location. Please try again.')
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+
+  const handleConfirmResolve = async () => {
+    if (!capturedLocation || !resolveModalReport) return
+    if (capturedLocation.distance > 50) {
+      setLocationError('Cannot resolve this complaint. You must be within 50 meters of the reported location.')
+      return
+    }
+
+    setSubmittingResolve(true)
+    setLocationError('')
+
     try {
       const { data } = await axios.patch(
-        `${serverUrl}/api/admin/officer/reports/${id}/status`,
+        `${serverUrl}/api/admin/officer/reports/${resolveModalReport._id}/status`,
+        {
+          status: 'RESOLVED',
+          latitude: capturedLocation.latitude,
+          longitude: capturedLocation.longitude
+        },
+        { withCredentials: true }
+      )
+
+      setReports(prev =>
+        prev.map(r => (r._id === resolveModalReport._id ? data.report : r))
+      )
+      handleCloseResolveModal()
+    } catch (e) {
+      console.error(e)
+      const msg =
+        e?.response?.data?.message || 'Failed to resolve complaint.'
+      setLocationError(msg)
+    } finally {
+      setSubmittingResolve(false)
+    }
+  }
+
+  const handleStatusChange = async (report, newStatus) => {
+    if (newStatus === 'RESOLVED') {
+      handleOpenResolveModal(report)
+      return
+    }
+
+    setUpdatingId(report._id)
+    try {
+      const { data } = await axios.patch(
+        `${serverUrl}/api/admin/officer/reports/${report._id}/status`,
         { status: newStatus },
         { withCredentials: true }
       )
-      setReports(prev => prev.map(r => r._id === id ? data.report : r))
+      setReports(prev => prev.map(r => (r._id === report._id ? data.report : r)))
     } catch (e) {
       console.error(e)
+      const msg =
+        e?.response?.data?.message || 'Failed to update complaint status.'
+      alert(msg)
     } finally {
       setUpdatingId(null)
     }
@@ -309,7 +437,7 @@ const OfficerIssues = () => {
                           <select
                             value={r.status}
                             disabled={updatingId === r._id}
-                            onChange={e => handleStatusChange(r._id, e.target.value)}
+                            onChange={e => handleStatusChange(r, e.target.value)}
                             className={`appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-400 transition disabled:opacity-50 ${STATUS_COLORS[r.status]}`}
                           >
                             <option value="PENDING">Pending</option>
@@ -351,6 +479,109 @@ const OfficerIssues = () => {
           )}
         </motion.div>
       </div>
+
+      {/* ===== RESOLUTION LIVE LOCATION MODAL ===== */}
+      <AnimatePresence>
+        {resolveModalReport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-sky-100 relative"
+            >
+              <button
+                onClick={handleCloseResolveModal}
+                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-2 mb-3 text-sky-600 font-semibold text-lg">
+                <Navigation size={20} />
+                <span>Resolve Complaint</span>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-3.5 mb-4 text-xs text-slate-600 space-y-1 border border-slate-100">
+                <div>
+                  <span className="font-semibold text-slate-700">Issue: </span>
+                  {resolveModalReport.aiAnalysis?.detectedType?.replace('_', ' ') || 'Civic Complaint'}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Location: </span>
+                  {resolveModalReport.location?.address || `${resolveModalReport.location?.latitude?.toFixed(4)}, ${resolveModalReport.location?.longitude?.toFixed(4)}`}
+                </div>
+              </div>
+
+              {/* Status & Error Alerts */}
+              {!capturedLocation && !locationError && (
+                <div className="bg-sky-50 border border-sky-200 text-sky-700 text-xs p-3 rounded-xl mb-4 flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>Live location is required to resolve this complaint.</span>
+                </div>
+              )}
+
+              {capturedLocation && (
+                <div className="bg-green-50 border border-green-200 text-green-700 text-xs p-3 rounded-xl mb-4 flex items-center gap-2">
+                  <CheckCircle size={16} className="shrink-0" />
+                  <span>
+                    Live location captured ({capturedLocation.distance.toFixed(1)}m from complaint).
+                  </span>
+                </div>
+              )}
+
+              {locationError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 text-xs p-3 rounded-xl mb-4 flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{locationError}</span>
+                </div>
+              )}
+
+              {/* Step 1: Get Live Location Button */}
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleGetLiveLocation}
+                  disabled={gettingLocation || submittingResolve}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-sm"
+                >
+                  {gettingLocation ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Getting live location...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation size={14} />
+                      <span>{capturedLocation ? 'Re-capture Live Location' : 'GET LIVE LOCATION'}</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Step 2: Final Resolve Button */}
+                <button
+                  type="button"
+                  onClick={handleConfirmResolve}
+                  disabled={!capturedLocation || capturedLocation.distance > 50 || submittingResolve}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3 rounded-xl text-xs transition cursor-pointer shadow-md"
+                >
+                  {submittingResolve ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Resolving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={16} />
+                      <span>RESOLVE COMPLAINT</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

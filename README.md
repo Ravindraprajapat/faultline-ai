@@ -64,20 +64,22 @@ Faultline AI creates a single automated workflow where:
 - **AI-Based Issue Reporting**: Submit infrastructure photos with browser GPS location.
 - **Automatic Backend Ward Detection**: Backend spatial polygon intersection (`$geoIntersects`) determines responsible ward.
 - **Gemini AI Damage Analysis**: Automated damage type classification, severity scoring (1-10), and priority mapping.
+- **AI Civic Context Verification**: Image verification engine rejects selfies, personal photos, screenshots, memes, and non-civic documents (`isValid === true`, `civicContext !== "Unknown"`, `confidence >= 0.75`).
 - **Real-Time Status Tracking**: Monitor complaint progress (`PENDING` → `IN_PROGRESS` → `RESOLVED`).
 - **Interactive Citizen CityMap**: Renders stored MongoDB GeoJSON ward boundary and plots real report GPS markers.
 - **Automated Notifications**: Non-blocking registration and resolution alerts via SMS/WhatsApp and Email.
 
-### 🛡️ Municipal Admin
-- **Global Operations Dashboard**: View all reported infrastructure complaints across the municipality.
-- **Ward Summaries**: Track total, pending, in-progress, and resolved metrics per ward.
-- **Ward Officer Assignment**: Assign and manage officers mapped to specific municipal wards.
-- **Interactive Admin Map**: Renders all official municipal ward polygons with complaint markers.
+### 7. AI Civic Context Verification Gate
+- **Visual Context Verification**: Gemini analyzes image pixels to establish visible civic infrastructure context (`Road`, `Footpath`, `Drainage`, `Public Utility`, `Public Property`, `Public Area`, `Street`).
+- **Strict Rejection Rules**: Images showing personal selfies, private objects, memes, text posters, screenshots, or unidentifiable close-ups are marked `isValid: false` and `civicContext: "Unknown"`.
+- **Backend Gate**: Uploads are rejected at the Express controller level with HTTP 400 Bad Request before Cloudinary storage or MongoDB database insertion.
 
 ### 👷 Ward Officer
 - **Ward-Filtered Dashboard**: Access complaints exclusively belonging to their assigned ward.
 - **Interactive Officer Map**: Visualizes assigned ward boundaries and localized complaint pins.
 - **Status Workflow Execution**: Update complaint status from `PENDING` to `IN_PROGRESS` and `RESOLVED`.
+- **Officer Live GPS Proximity Gate**: Officer must capture fresh device GPS (`maximumAge: 0`) and be within **50 meters** (`MAX_RESOLUTION_DISTANCE_METERS = 50`) of the complaint's stored coordinates to enable resolution.
+- **Backend Security Validation**: Backend independently recalculates Haversine distance before status becomes `RESOLVED`.
 - **Automated Resolution Trigger**: Marking an issue as `RESOLVED` automatically fires citizen notifications.
 
 ---
@@ -425,6 +427,99 @@ flowchart TD
 
     DB --> NOTIFY["Citizen Resolution Notification"]
 ```
+
+---
+
+## AI Image & Civic Context Verification System
+
+Uploaded complaint photos undergo an automated verification analysis by Google Gemini AI before they can be persisted as valid civic reports:
+
+### 1. Visual Verification Criteria
+Google Gemini evaluates image content based **ONLY on visual pixel evidence**:
+- **Acceptable Images**: Issue is visibly located in or associated with a public civic infrastructure location (`Road`, `Footpath`, `Drainage`, `Public Utility`, `Public Property`, `Public Area`, `Street`).
+- **Rejected Images**: Personal selfies, indoor face/body photos, private objects without civic context, screenshots, memes, posters, text documents, or unidentifiable close-ups.
+- **Strict Evidence Rule**: Civic context is **never** inferred from GPS coordinates, ward name, image filename, metadata, category dropdowns, or user-written descriptions.
+
+### 2. Supported Civic Context Values
+- `"Road"`
+- `"Footpath"`
+- `"Drainage"`
+- `"Public Utility"`
+- `"Public Property"`
+- `"Public Area"`
+- `"Street"`
+- `"Unknown"` (Assigned when visual context is insufficient; triggers immediate rejection).
+
+### 3. Backend Verification Gate
+The backend Express controller (`reportController.js`) acts as the final gate check after parsing Gemini's structured JSON response:
+```javascript
+const isCivicValid =
+  parsed.isValid !== false &&
+  parsed.civicContext !== 'Unknown' &&
+  Number(parsed.confidence) >= 0.75
+```
+- **Validation Rule**: If `isValid === false`, `civicContext === "Unknown"`, or `confidence < 0.75`, the request is immediately aborted with **HTTP 400 Bad Request**.
+- **Data Protection**: Invalid images are deleted from temporary disk storage (`fs.unlinkSync`) and are **never** uploaded to Cloudinary or created in MongoDB.
+
+---
+
+## Officer Live Location Resolution Verification (50-Meter Proximity Rule)
+
+To prevent remote or false resolutions, Ward Officers must be physically present at the complaint site when marking an issue as `RESOLVED`.
+
+### 1. Officer Resolution Workflow
+```
+Officer selects RESOLVED status
+        ↓
+Resolution modal opens
+        ↓
+Officer clicks "GET LIVE LOCATION"
+        ↓
+Browser requests fresh GPS (maximumAge: 0, enableHighAccuracy: true)
+        ↓
+Calculate distance to complaint stored coordinates
+        ↓
+Is Distance <= 50 meters?
+       /                 \
+     YES                  NO
+      ↓                    ↓
+Display green alert      Display red alert
+Enable final button      Final button disabled 🔒
+      ↓
+Officer clicks "RESOLVE COMPLAINT"
+      ↓
+Backend independently validates Haversine distance
+      ↓
+Complaint updated to RESOLVED in MongoDB
+```
+
+### 2. Fresh GPS Requirement (`maximumAge: 0`)
+The browser requests current device location using:
+```javascript
+navigator.geolocation.getCurrentPosition(callback, errorCallback, {
+  enableHighAccuracy: true,
+  timeout: 10000,
+  maximumAge: 0 // Prevents using cached or stale GPS locations
+})
+```
+- **Explicit Final Action**: Obtaining live location does **not** automatically resolve the complaint. The officer must explicitly review the captured distance badge and click `"RESOLVE COMPLAINT"`.
+
+### 3. Centralized 50-Meter Proximity Constant
+- **`MAX_RESOLUTION_DISTANCE_METERS = 50`**
+- Distance is calculated using the standard **Haversine formula** (in meters):
+$$\text{distance} = 2 R \cdot \arcsin\left(\sqrt{\sin^2\left(\frac{\Delta \text{lat}}{2}\right) + \cos(\text{lat}_1)\cos(\text{lat}_2)\sin^2\left(\frac{\Delta \text{lon}}{2}\right)}\right)$$
+
+### 4. Independent Backend Security Validation
+Frontend proximity calculations exist purely for user experience. The Express backend (`updateReportStatus` in `adminController.js`) independently recalculates the distance between `req.body.latitude` / `req.body.longitude` and `existingReport.location.latitude` / `existingReport.location.longitude`.
+- **Direct API Protection**: If a user attempts to bypass the frontend or send fake/out-of-range coordinates, the backend rejects the update with **HTTP 400 Bad Request**: `"Cannot resolve this complaint. You must be within 50 meters of the reported location."`
+
+### 5. Resolution Rejection Cases
+Resolution is strictly blocked (and complaint status remains unchanged) when:
+- Officer is $> 50$ meters away from the reported complaint coordinates.
+- Browser GPS permission is denied by the user.
+- Browser GPS request times out or fails to acquire coordinates.
+- Submitted `latitude` or `longitude` is missing, `null`, or `NaN`.
+- Backend Haversine distance validation exceeds 50m.
 
 ---
 

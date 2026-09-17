@@ -173,11 +173,11 @@ export const getOfficerReports = async (req, res) => {
   }
 }
 
-// Admin: update report status
+// Admin / Officer: update report status
 export const updateReportStatus = async (req, res) => {
   try {
     const { id } = req.params
-    const { status } = req.body
+    const { status, latitude, longitude } = req.body
 
     const validStatuses = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
     if (!validStatuses.includes(status)) {
@@ -186,6 +186,62 @@ export const updateReportStatus = async (req, res) => {
 
     const existingReport = await Report.findById(id)
     if (!existingReport) return res.status(404).json({ message: 'Report not found' })
+
+    // 🔹 PROXIMITY GATE FOR RESOLUTION
+    if (status === 'RESOLVED') {
+      const officerLat = Number(latitude)
+      const officerLng = Number(longitude)
+
+      if (isNaN(officerLat) || isNaN(officerLng)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Live GPS location is required to resolve a complaint.'
+        })
+      }
+
+      const complaintLat = existingReport.location?.latitude
+      const complaintLng = existingReport.location?.longitude
+
+      if (typeof complaintLat !== 'number' || typeof complaintLng !== 'number' || isNaN(complaintLat) || isNaN(complaintLng)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Complaint location coordinates are invalid or missing.'
+        })
+      }
+
+      // Haversine distance in meters
+      const MAX_RESOLUTION_DISTANCE_METERS = 50
+
+      const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
+        const R = 6371000 // Earth radius in meters
+        const dLat = ((lat2 - lat1) * Math.PI) / 180
+        const dLon = ((lon2 - lon1) * Math.PI) / 180
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c
+      }
+
+      const distanceMeters = calculateDistanceMeters(
+        officerLat,
+        officerLng,
+        complaintLat,
+        complaintLng
+      )
+
+      console.log(`[Resolution Check] Calculated distance: ${distanceMeters.toFixed(2)}m (Max: ${MAX_RESOLUTION_DISTANCE_METERS}m)`)
+
+      if (distanceMeters > MAX_RESOLUTION_DISTANCE_METERS) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot resolve this complaint. You must be within ${MAX_RESOLUTION_DISTANCE_METERS} meters of the reported location.`
+        })
+      }
+    }
 
     const isNewlyResolved = status === 'RESOLVED' && existingReport.status !== 'RESOLVED'
 

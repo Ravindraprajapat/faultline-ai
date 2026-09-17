@@ -5,7 +5,8 @@ import {
   Image as ImageIcon,
   Send,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react'
 import axios from 'axios'
 import Navbar from '../components/Navbar'
@@ -38,11 +39,15 @@ const Report = () => {
   const [locLoading, setLocLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleImageChange = e => {
     const file = e.target.files[0]
-    if (file) setImage(file)
+    if (file) {
+      setImage(file)
+      setError('')
+    }
   }
 
   const handleGetLocation = () => {
@@ -99,11 +104,12 @@ const Report = () => {
   }
 
   const handleSubmit = async () => {
-    if (!image) return alert('Please upload image')
-    if (!location) return alert('Please fetch location')
+    if (!image) return setError('Please upload image')
+    if (!location) return setError('Please fetch location')
 
     setLoading(true)
     setSuccess(false)
+    setError('')
 
     try {
       const formData = new FormData()
@@ -124,10 +130,12 @@ const Report = () => {
         setSuccess(false)
         navigate('/track-status')
       }, 1500)
-    } catch (error) {
-      console.log(error.response)
-      console.log(error.response?.data)
-      alert(error.response?.data?.message || 'Failed to submit complaint')
+    } catch (err) {
+      console.log(err.response)
+      console.log(err.response?.data)
+      const msg =
+        err?.response?.data?.message || 'Failed to submit complaint'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -163,6 +171,18 @@ const Report = () => {
           >
             <CheckCircle size={20} />
             Complaint Submitted Successfully!
+          </motion.div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className='flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg mb-6'
+          >
+            <AlertCircle size={18} className='flex-shrink-0' />
+            <span>{error}</span>
           </motion.div>
         )}
 

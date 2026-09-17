@@ -71,11 +71,50 @@ export const createReport = async (req, res) => {
           text: `You are an infrastructure damage detection AI.
 Analyze image carefully.
 
+### CIVIC CONTEXT VERIFICATION
+The uploaded image must contain enough visible surrounding context to establish that the reported issue is actually related to a civic/public infrastructure location.
+
+ACCEPT the image (isValid: true) when the issue is visibly located in or clearly associated with:
+- Road
+- Street
+- Footpath / Sidewalk
+- Drainage
+- Public Utility
+- Public Property
+- Public Area
+- Other clearly visible civic/public infrastructure
+
+REJECT the image (isValid: false) when:
+- The image does not show any civic/public context (e.g. personal photo, indoor selfie, face/body photo).
+- The reported issue is not visibly present.
+- The image contains only an unrelated private/personal object.
+- The image is a screenshot.
+- The image is a meme.
+- The image is a poster/document/text-only image.
+- The image does not provide enough visual evidence to verify the civic issue.
+- The issue can only be assumed from text, filename, metadata, GPS, ward information, or the user's claim.
+
+IMPORTANT:
+Do NOT infer civic context from:
+- GPS coordinates
+- Ward name
+- Image filename
+- Image metadata
+- User-provided description
+- Complaint category
+- Any external information
+
+Civic context must be determined ONLY from what is visually visible in the uploaded image.
+
+If the image appears potentially relevant but the surrounding context is insufficient to confidently establish a civic/public location, set isValid: false, civicContext: "Unknown", and confidence < 0.75.
+
 Return ONLY JSON:
 {
  "damageType": "POTHOLE | ROAD_CRACK | GARBAGE | STREETLIGHT | WATER_LEAK | OTHER",
  "severity": number (1-10),
- "confidence": number (0-1)
+ "confidence": number (0-1),
+ "civicContext": "Road | Footpath | Drainage | Public Utility | Public Property | Public Area | Street | Unknown",
+ "isValid": boolean (true | false)
 }`
         },
         {
@@ -100,7 +139,24 @@ Return ONLY JSON:
 
     const parsed = JSON.parse(jsonMatch[0])
 
-    // ✅ STEP 3: Severity Validation
+    // ✅ STEP 3: Verification Gate Check
+    const isCivicValid =
+      parsed.isValid !== false &&
+      parsed.civicContext !== 'Unknown' &&
+      Number(parsed.confidence) >= 0.75
+
+    if (!isCivicValid) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path)
+      }
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid image: The uploaded image does not contain clear visual evidence of a civic or public infrastructure issue.'
+      })
+    }
+
+    // ✅ STEP 4: Severity Validation
     let severityScore = Number(parsed.severity)
     if (!severityScore || severityScore < 1) severityScore = 5
     if (severityScore > 10) severityScore = 10
@@ -109,10 +165,10 @@ Return ONLY JSON:
     if (severityScore >= 7) priorityLevel = 'HIGH'
     else if (severityScore >= 4) priorityLevel = 'MEDIUM'
 
-    // ✅ STEP 4: Upload to Cloudinary
+    // ✅ STEP 5: Upload to Cloudinary
     const imageUrl = await uploadOnCloudinary(localFilePath)
 
-    // ✅ STEP 5: Save Report with Authoritative Ward
+    // ✅ STEP 6: Save Report with Authoritative Ward
     const report = await Report.create({
       reportedBy: req.userId,
       imageUrl,
